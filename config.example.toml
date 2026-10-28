@@ -3,7 +3,8 @@
 [model]
 # 第一阶段可以直接填供应商官方地址；第二阶段换成 one-api 的本地地址即可，业务代码不用改。
 base_url = "https://api.deepseek.com"
-api_key = "sk-在这里填"
+# 把真实 key 粘在下面引号里。留空或含中文会跳过模型测试（不会报错）。
+api_key = ""
 # 文本模型：用于润色标题、正文、标签
 text_model = "deepseek-chat"
 # 图像模型：必须支持「参考图输入」，否则做不了商品图
@@ -12,6 +13,21 @@ image_model = ""
 [mxpage]
 # MxPage 导出目录。约定：一个商品一个子文件夹，文件夹名 = 商品名
 output_dir = "D:\\MxPage\\output"
+
+[local]
+# 本地 ComfyUI。不花钱，但慢——8GB 显存跑 20GB 模型要有耐心。
+# 用之前先启动：D:\AI\ComfyUI_windows_portable\Start_Wan_8GB.bat
+comfyui_url = "http://127.0.0.1:8188"
+unet = "qwen-image-edit-2511-Q8_0.gguf"
+clip = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+vae = "qwen_image_vae.safetensors"
+steps = 20
+cfg = 2.5
+shift = 3.1
+width = 1024
+height = 1024
+# 单张最长等待秒数。8GB 显存首次加载模型可能要几分钟。
+wait_timeout = 900
 
 [publish]
 # social-auto-upload 的 CLI 命令名或绝对路径

@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import AppConfig
 from .ingest.mxpage import scan
 from .model.client import ModelError, OpenAICompatible
+from .model.comfyui import ComfyClient, ComfyError
 
 OK = "[ OK ]"
 WARN = "[WARN]"
@@ -64,7 +65,31 @@ def run_check(cfg: AppConfig) -> int:
             _line(FAIL, "模型接口", str(exc).splitlines()[0])
             failures += 1
 
-    # 4. MxPage 输出目录
+    # 4. 本地 ComfyUI
+    local = ComfyClient(cfg.local.comfyui_url, timeout=5)
+    if not local.is_up():
+        _line(WARN, "ComfyUI", f"{cfg.local.comfyui_url} 未启动（跑 Start_Wan_8GB.bat）")
+    else:
+        _line(OK, "ComfyUI", cfg.local.comfyui_url)
+        try:
+            unets = local.node_options("UnetLoaderGGUF", "unet_name")
+            if cfg.local.unet in unets:
+                _line(OK, "本地图像模型", cfg.local.unet)
+            else:
+                _line(WARN, "本地图像模型", f"{cfg.local.unet} 不在列表里，检查 [local] unet")
+            for label, node, field, want in (
+                ("本地 CLIP", "CLIPLoader", "clip_name", cfg.local.clip),
+                ("本地 VAE", "VAELoader", "vae_name", cfg.local.vae),
+            ):
+                options = local.node_options(node, field)
+                if want in options:
+                    _line(OK, label, want)
+                else:
+                    _line(WARN, label, f"{want} 不在列表里")
+        except ComfyError as exc:
+            _line(WARN, "本地模型", str(exc).splitlines()[0])
+
+    # 5. MxPage 输出目录
     if not cfg.mxpage_output_dir:
         _line(WARN, "MxPage 输出目录", "未配置 mxpage.output_dir")
     else:
@@ -87,7 +112,7 @@ def run_check(cfg: AppConfig) -> int:
                 else:
                     _line(WARN, "MxPage 输出目录", f"{folder} 里没有找到图片")
 
-    # 5. 发布工具
+    # 6. 发布工具
     if not cfg.sau_cmd:
         _line(WARN, "发布工具 sau", "未配置 publish.sau_cmd")
     else:

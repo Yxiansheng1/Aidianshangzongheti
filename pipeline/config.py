@@ -25,8 +25,25 @@ class ModelConfig:
 
 
 @dataclass
+class LocalConfig:
+    """本地 ComfyUI。不花钱，但慢——8GB 显存跑 20GB 模型要忍耐。"""
+
+    comfyui_url: str = "http://127.0.0.1:8188"
+    unet: str = "qwen-image-edit-2511-Q8_0.gguf"
+    clip: str = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+    vae: str = "qwen_image_vae.safetensors"
+    steps: int = 20
+    cfg: float = 2.5
+    shift: float = 3.1
+    width: int = 1024
+    height: int = 1024
+    wait_timeout: int = 900
+
+
+@dataclass
 class AppConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
+    local: LocalConfig = field(default_factory=LocalConfig)
     mxpage_output_dir: str = ""
     sau_cmd: str = "sau"
     platforms: list[str] = field(default_factory=list)
@@ -36,7 +53,9 @@ class AppConfig:
 
     @property
     def has_model(self) -> bool:
-        return bool(self.model.api_key and self.model.base_url)
+        key = self.model.api_key.strip()
+        # 占位符（含中文）也当成「没配置」，避免拿它去发请求
+        return bool(key and key.isascii() and self.model.base_url)
 
 
 def load_config(path: Path | str | None = None) -> AppConfig:
@@ -52,6 +71,10 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     raw_model = data.get("model", {})
     known = set(ModelConfig.__dataclass_fields__)
     cfg.model = ModelConfig(**{k: v for k, v in raw_model.items() if k in known})
+
+    raw_local = data.get("local", {})
+    known_local = set(LocalConfig.__dataclass_fields__)
+    cfg.local = LocalConfig(**{k: v for k, v in raw_local.items() if k in known_local})
 
     cfg.mxpage_output_dir = data.get("mxpage", {}).get("output_dir", "")
 

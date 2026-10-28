@@ -12,31 +12,45 @@
 
 | 层 | 用什么 | 许可证 | 状态 |
 |---|---|---|---|
+| **本地生成** | **ComfyUI + Qwen-Image-Edit 2511** | 开源模型 | **✅ 已跑通** |
+| 内容生成（批量） | [MxPage](https://github.com/ziguishian/MxPage) | MIT | 可选 |
 | 模型网关 | [one-api](https://github.com/songquanpeng/one-api) | MIT | 第二阶段（可选） |
-| 内容生成 | [MxPage](https://github.com/ziguishian/MxPage) | MIT | 待安装 |
 | 多平台发布 | [social-auto-upload](https://github.com/dreammis/social-auto-upload) | MIT | 待安装 |
 | 选品数据 | 暂不做 | — | 后续 |
 | **胶水层** | **本仓库** | 私有 | 开发中 |
 
+### 实测数据（RTX 5060 Laptop 8GB / 63GB 内存）
+
+| 项 | 结果 |
+|---|---|
+| 模型 | `qwen-image-edit-2511-Q8_0.gguf`（20.27 GB） |
+| 启动 ComfyUI | 22 秒（`--lowvram`） |
+| 单张 1024×1024 / 20 步 | **约 462 秒（7.7 分钟）** |
+| 费用 | 0 元 |
+| 商品保真 | 形状、瓶盖、标签完整保留 |
+
+
 ## 拼装关系
 
 ```
-商品图 / 商品事实
+商品原图（手机拍一张就行）
         ↓
-    MxPage（生成主图、详情页、小红书图文）
+    ① 本地出图  ComfyUI + Qwen-Image-Edit   ← 0 元，约 8 分钟/张
         ↓
-    输出目录（每个商品一个文件夹）
+    ② 可选：MxPage 做详情页长图 / 小红书图文 / 批量（需要云 API）
         ↓
-    ingest  读目录 → 生成 manifest.json
+    ③ 输出目录（每个商品一个文件夹）
         ↓
-    model   可选：润色标题 / 正文 / 标签
+    ④ ingest  读目录 → 生成 manifest.json
         ↓
-    publish 调 social-auto-upload 的 CLI
+    ⑤ model   可选：润色标题 / 正文 / 标签
+        ↓
+    ⑥ publish 调 social-auto-upload 的 CLI
         ↓
     抖音 / 小红书 / 快手 / 视频号
 ```
 
-**设计原则：`model` 和 `publish` 都是适配层。** 换模型供应商只改 `config.toml`，换发布工具只改 `pipeline/publish/`，主流程不动。
+**设计原则：模型层和发布层都是适配层。** 本地换云端、换发布工具，都只改一个文件，主流程不动。
 
 ## 快速开始
 
@@ -45,13 +59,22 @@ cd D:\AIdianshangzongheti
 python -m pipeline check
 ```
 
-三条命令就能跑完全流程：
+完整流程：
 
 ```powershell
-python -m pipeline check                                   # 环境自检
-python -m pipeline ingest --dir "D:\MxPage\output"          # 扫描产物，生成清单
-python -m pipeline publish --platform xiaohongshu           # 打印发布计划（默认不执行）
-python -m pipeline publish --platform xiaohongshu --execute # 真正执行
+# 0. 启动 ComfyUI（8GB 显存用这个）
+D:\AI\ComfyUI_windows_portable\Start_Wan_8GB.bat
+
+# 1. 出图：商品原图 → 场景图
+python -m pipeline gen --image "samples\测试商品-香薰蜡烛.png" `
+    --prompt "放在浅色木纹桌面，清晨侧光，浅景深，高级电商主图风格，商品保持原样"
+
+# 2. 扫目录，生成发布清单
+python -m pipeline ingest --dir "D:\MxPage\output"
+
+# 3. 发布（默认只打印，不执行）
+python -m pipeline publish --platform xiaohongshu
+python -m pipeline publish --platform xiaohongshu --execute
 ```
 
 ## 目录

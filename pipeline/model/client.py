@@ -25,6 +25,9 @@ class OpenAICompatible:
         if not url.endswith("/v1"):
             url += "/v1"
         self.base_url = url
+        # HTTP 头只能是 latin-1，key 里有中文会在最底层炸出看不懂的错，提前拦住
+        if self.api_key and not self.api_key.isascii():
+            raise ModelError("api_key 含非 ASCII 字符，多半是占位符没替换成真实 key")
 
     # ---- 底层 ----
 

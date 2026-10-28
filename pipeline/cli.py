@@ -15,6 +15,7 @@ from pathlib import Path
 from .checks import run_check
 from .config import load_config
 from .ingest.mxpage import build_manifest, scan
+from .model.comfyui import ComfyClient, ComfyError, generate
 from .publish.sau import build_plan, run
 
 
@@ -56,6 +57,42 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
             missing.append("无标签")
         note = f"   ⚠ {', '.join(missing)}" if missing else ""
         print(f"  · {product.name}  {len(product.images)} 张图{note}")
+    return 0
+
+
+def _cmd_gen(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    client = ComfyClient(cfg.local.comfyui_url)
+
+    if not client.is_up():
+        print(f"ComfyUI 没在跑（{cfg.local.comfyui_url}）")
+        print("先启动：D:\\AI\\ComfyUI_windows_portable\\Start_Wan_8GB.bat（8GB 显存用这个）")
+        return 2
+
+    out = args.out or str(Path(args.image).with_name(Path(args.image).stem + "-gen.png"))
+
+    try:
+        path = generate(
+            client,
+            args.image,
+            args.prompt,
+            out,
+            unet=cfg.local.unet,
+            clip=cfg.local.clip,
+            vae=cfg.local.vae,
+            width=args.width or cfg.local.width,
+            height=args.height or cfg.local.height,
+            steps=args.steps or cfg.local.steps,
+            cfg=args.cfg if args.cfg is not None else cfg.local.cfg,
+            shift=cfg.local.shift,
+            seed=args.seed,
+            wait_timeout=cfg.local.wait_timeout,
+        )
+    except ComfyError as exc:
+        print(f"失败：{exc}")
+        return 1
+
+    print(f"完成：{path.resolve()}  ({path.stat().st_size / 1024:.0f} KB)")
     return 0
 
 
@@ -115,6 +152,18 @@ def main(argv: list[str] | None = None) -> int:
     p_ingest.add_argument("--dir", help="覆盖 config.toml 里的 mxpage.output_dir")
     p_ingest.add_argument("--out", default="manifest.json", help="清单输出路径")
     p_ingest.set_defaults(func=_cmd_ingest)
+
+    p_gen = sub.add_parser("gen", help="本地生成一张图（ComfyUI + Qwen-Image-Edit）")
+    _add_config(p_gen)
+    p_gen.add_argument("--image", required=True, help="商品原图路径")
+    p_gen.add_argument("--prompt", required=True, help="想改成什么样，例如：放到木桌上，晨光，浅景深")
+    p_gen.add_argument("--out", help="输出路径，默认在原图旁边加 -gen")
+    p_gen.add_argument("--width", type=int, help="默认取 config.toml")
+    p_gen.add_argument("--height", type=int)
+    p_gen.add_argument("--steps", type=int)
+    p_gen.add_argument("--cfg", type=float)
+    p_gen.add_argument("--seed", type=int, default=0)
+    p_gen.set_defaults(func=_cmd_gen)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)
