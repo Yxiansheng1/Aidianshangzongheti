@@ -11,6 +11,7 @@ from .config import AppConfig
 from .ingest.mxpage import scan
 from .model.client import ModelError, OpenAICompatible
 from .model.comfyui import ComfyClient, ComfyError
+from .publish.sau import resolve_sau
 
 OK = "[ OK ]"
 WARN = "[WARN]"
@@ -138,11 +139,24 @@ def run_check(cfg: AppConfig) -> int:
     if not cfg.sau_cmd:
         _line(WARN, "发布工具 sau", "未配置 publish.sau_cmd")
     else:
-        found = shutil.which(cfg.sau_cmd)
-        if found:
+        found = resolve_sau(cfg.sau_cmd, cfg.sau_cwd)
+        if Path(found).exists() or shutil.which(found):
             _line(OK, "发布工具 sau", found)
         else:
             _line(WARN, "发布工具 sau", f"找不到 {cfg.sau_cmd!r}（安装清单第 2 步还没做）")
+
+    # 7. 发布账号登录态
+    if cfg.platforms and cfg.sau_cwd:
+        for platform in cfg.platforms:
+            account = cfg.accounts.get(platform, "")
+            if not account:
+                _line(WARN, f"账号 {platform}", "config.toml 里没有 [publish.accounts] 配置")
+                continue
+            cookie = Path(cfg.sau_cwd) / "cookies" / f"{platform}_{account}.json"
+            if cookie.is_file():
+                _line(OK, f"账号 {platform}", f"{cookie.name}（已登录过）")
+            else:
+                _line(WARN, f"账号 {platform}", f"未登录，跑 sau {platform} login --account {account} --headed")
 
     print("-" * 64)
     if failures:

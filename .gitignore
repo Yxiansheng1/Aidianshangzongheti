@@ -8,6 +8,7 @@ config.toml
 manifest.json
 candidates.toml
 output/
+input_uploads/
 exports/
 logs/
 

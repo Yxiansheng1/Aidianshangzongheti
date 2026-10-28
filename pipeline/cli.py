@@ -20,7 +20,7 @@ from .ingest.mxpage import build_manifest, scan
 from .model.comfyui import ComfyClient, ComfyError, generate, generate_video
 from .pick import store as pick_store
 from .pick.score import LABELS, WEIGHTS, rank as rank_candidates
-from .publish.sau import build_plan, run
+from .publish.sau import build_plan, resolve_sau, run
 
 
 def _add_config(parser: argparse.ArgumentParser) -> None:
@@ -220,6 +220,13 @@ def _cmd_pick(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gui(args: argparse.Namespace) -> int:
+    from .gui.server import serve
+
+    serve(port=args.port, open_browser=args.open)
+    return 0
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
 
@@ -253,6 +260,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
         return 2
 
     errors = 0
+    sau_cmd = resolve_sau(cfg.sau_cmd, cfg.sau_cwd)
     for product in products:
         kind = args.kind or ("video" if product.get("video") else "note")
         for platform in platforms:
@@ -261,7 +269,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
                     product,
                     platform,
                     account=cfg.accounts[platform],
-                    sau_cmd=cfg.sau_cmd,
+                    sau_cmd=sau_cmd,
                     kind=kind,
                     schedule=args.schedule,
                     headed=args.headed,
@@ -333,6 +341,12 @@ def main(argv: list[str] | None = None) -> int:
     p_pick_rank.add_argument("--top", type=int, help="只显示前 N 名")
 
     p_pick.set_defaults(func=_cmd_pick)
+
+    p_gui = sub.add_parser("gui", help="打开本地 Web 界面（零依赖）")
+    _add_config(p_gui)
+    p_gui.add_argument("--port", type=int, default=8899, help="端口，默认 8899")
+    p_gui.add_argument("--open", action="store_true", help="自动打开浏览器")
+    p_gui.set_defaults(func=_cmd_gui)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)

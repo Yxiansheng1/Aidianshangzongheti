@@ -50,8 +50,24 @@
 
 ## 快速开始
 
+**双击 `启动工作台.bat`** —— 会自动拉起 ComfyUI，然后打开浏览器界面：
+
+```
+http://127.0.0.1:8899
+```
+
+界面四个页签：**出图 / 视频 / 选品 / 发布**，选中图、写提示词、点按钮就行，不用记命令。
+
+命令行方式（等价）：
+
 ```powershell
 cd D:\AIdianshangzongheti
+python -m pipeline gui --open
+```
+
+## 命令行
+
+```powershell
 python -m pipeline check
 ```
 

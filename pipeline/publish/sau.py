@@ -18,6 +18,7 @@ argv 列表交给 subprocess 时不会经过 shell，这些问题全部消失。
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,28 @@ PLATFORM_ACTIONS: dict[str, dict[str, str]] = {
 
 # 小红书的硬限制
 MAX_TAGS_XHS = 10
+
+
+def resolve_sau(sau_cmd: str, cwd: str = "") -> str:
+    """找到真正能执行的 sau。
+
+    优先用 PATH 里的；找不到就去 cwd 下的 .venv 里找。
+    这样 config.toml 里写 "sau" 也能跑——只要 sau_cwd 填对了。
+    """
+    if not sau_cmd:
+        return sau_cmd
+    if shutil.which(sau_cmd):
+        return sau_cmd
+    if cwd:
+        base = Path(cwd) / ".venv"
+        for candidate in (
+            base / "Scripts" / "sau.exe",
+            base / "Scripts" / "sau",
+            base / "bin" / "sau",
+        ):
+            if candidate.is_file():
+                return str(candidate)
+    return sau_cmd
 
 
 @dataclass

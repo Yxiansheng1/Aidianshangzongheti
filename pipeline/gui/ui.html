@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI 电商综合体</title>
+<style>
+  :root{
+    --bg:#f5f4f1; --card:#fff; --ink:#17171a; --muted:#6f6e69; --line:#e4e1da;
+    --accent:#2f6b4f; --accent-soft:#e9f1ec; --warn:#a35a06; --warn-soft:#fbf1e2;
+    --danger:#a8271f; --danger-soft:#fbeceb; --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 20px 70px}
+
+  header{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font-size:20px;margin:0;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
+  .chip{font-size:11.5px;padding:4px 10px;border-radius:20px;background:#eeede8;color:var(--muted);
+    display:flex;align-items:center;gap:5px}
+  .chip i{width:6px;height:6px;border-radius:50%;background:#b9b6ae;display:block}
+  .chip.ok{background:var(--accent-soft);color:var(--accent)}
+  .chip.ok i{background:var(--accent)}
+  .chip.bad{background:var(--danger-soft);color:var(--danger)}
+  .chip.bad i{background:var(--danger)}
+
+  nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px}
+  nav button{background:none;border:none;padding:10px 16px;font:inherit;font-size:13.5px;
+    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  nav button.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  nav button:hover{color:var(--ink)}
+
+  .panel{display:none}
+  .panel.active{display:block}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+
+  label.field{display:block;margin-bottom:14px}
+  label.field > span{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  textarea,select,input[type=text],input[type=number]{
+    font:inherit;font-size:13px;width:100%;padding:8px 10px;border:1px solid var(--line);
+    border-radius:8px;background:#fdfcfa;color:var(--ink)}
+  textarea{resize:vertical;min-height:82px;line-height:1.55}
+  textarea:focus,select:focus,input:focus{outline:2px solid var(--accent-soft);border-color:#b9cfc2}
+
+  .btn{font:inherit;font-size:13px;cursor:pointer;border:1px solid var(--line);background:var(--card);
+    color:var(--ink);padding:8px 16px;border-radius:8px}
+  .btn:hover{border-color:#c9c5bb;background:#fbfaf8}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:#275a42}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.small{padding:5px 11px;font-size:12px}
+
+  .drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:26px 16px;text-align:center;
+    color:var(--muted);font-size:12.5px;cursor:pointer;background:#fdfcfa;transition:.15s}
+  .drop:hover,.drop.over{border-color:#b9cfc2;background:var(--accent-soft);color:var(--accent)}
+  .thumb{max-width:100%;border-radius:8px;border:1px solid var(--line);display:block}
+  .thumb-wrap{position:relative}
+  .thumb-meta{font-size:11.5px;color:var(--muted);margin-top:6px;word-break:break-all}
+
+  .status-line{font-size:12.5px;color:var(--muted);margin-top:12px;display:flex;align-items:center;gap:8px}
+  .spinner{width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err{background:var(--danger-soft);color:var(--danger);padding:9px 12px;border-radius:8px;
+    font-size:12.5px;margin-top:12px;white-space:pre-wrap}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 10px;background:#faf9f6;color:var(--muted);font-weight:600;
+    font-size:12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid #f4f2ed;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right}
+  .grade{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .g-主推{background:var(--accent-soft);color:var(--accent)}
+  .g-备选{background:#eef3ea;color:#4c6b3c}
+  .g-观察{background:var(--warn-soft);color:var(--warn)}
+  .g-放弃,.g-淘汰{background:var(--danger-soft);color:var(--danger)}
+
+  .advice{margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--accent-soft);
+    color:var(--accent);font-size:13px}
+  .muted{color:var(--muted);font-size:12.5px}
+  .empty{padding:36px 16px;text-align:center;color:var(--muted);font-size:13px;
+    border:1px dashed var(--line);border-radius:var(--radius)}
+
+  pre.cmd{background:#17171a;color:#e8e6e1;padding:11px 13px;border-radius:8px;font-size:12px;
+    overflow-x:auto;margin:6px 0 14px;line-height:1.65;
+    font-family:Consolas,"Cascadia Mono",monospace;white-space:pre-wrap;word-break:break-all}
+  .plan-head{font-size:12.5px;color:var(--muted);margin-bottom:4px}
+  .plan-head b{color:var(--ink)}
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .spacer{flex:1}
+  .hint{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7}
+  .hint b{color:var(--ink)}
+  a.file-link{color:var(--accent);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>AI 电商综合体</h1>
+      <div class="sub">选品 → 出图 → 出视频 → 发布，全程本地</div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <nav>
+    <button data-tab="gen" class="active">出图</button>
+    <button data-tab="vid">视频</button>
+    <button data-tab="pick">选品</button>
+    <button data-tab="pub">发布</button>
+  </nav>
+
+  <!-- ================= 出图 ================= -->
+  <section class="panel active" id="panel-gen">
+    <div class="grid">
+      <div class="card">
+        <label class="field">
+          <span>商品原图</span>
+          <div class="drop" id="gen-drop">点这里选图，或把图片拖进来</div>
+          <input type="file" id="gen-file" accept="image/*" hidden>
+        </label>
+        <div class="thumb-wrap" id="gen-thumb-wrap" style="display:none;margin-bottom:14px">
+          <img class="thumb" id="gen-thumb" alt="">
+          <div class="thumb-meta" id="gen-thumb-meta"></div>
+        </div>
+
+        <label class="field">
+          <span>想改成什么样</span>
+          <textarea id="gen-prompt">把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，干净高级的电商主图风格，商品本身保持原样、形状和标签不变</textarea>
+        </label>
+
+        <div class="row" style="margin-bottom:14px">
+          <label style="font-size:12.5px;color:var(--muted)">尺寸</label>
+          <select id="gen-size" style="width:auto">
+            <option value="1024">1024 × 1024</option>
+            <option value="896">896 × 896</option>
+            <option value="768">768 × 768</option>
+          </select>
+          <label style="font-size:12.5px;color:var(--muted);margin-left:8px">步数</label>
+          <input type="number" id="gen-steps" value="20" min="4" max="40" style="width:70px">
+        </div>
+
+        <button class="btn primary" id="gen-go">开始生成</button>
+        <div class="status-line" id="gen-status"></div>
+        <div id="gen-error"></div>
+        <div class="hint">8GB 显存跑 20GB 模型，一张约 <b>8 分钟</b>。生成期间不要关这个页面。</div>
+      </div>
+
+      <div class="card">
+        <div id="gen-result" class="empty">生成结果会出现在这里</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 视频 ================= -->
+  <section class="panel" id="panel-vid">
+    <div class="grid">
+      <div class="card">
+        <label class="field">
+          <span>起始图（建议用刚出的主图）</span>
+          <div class="drop" id="vid-drop">点这里选图，或把图片拖进来</div>
+          <input type="file" id="vid-file" accept="image/*" hidden>
+        </label>
+        <div class="thumb-wrap" id="vid-thumb-wrap" style="display:none;margin-bottom:14px">
+          <img class="thumb" id="vid-thumb" alt="">
+          <div class="thumb-meta" id="vid-thumb-meta"></div>
+        </div>
+
+        <label class="field">
+          <span>画面怎么动</span>
+          <textarea id="vid-prompt">镜头缓慢推进，光线缓缓移动，画面安静高级</textarea>
+        </label>
+
+        <div class="row" style="margin-bottom:14px">
+          <label style="font-size:12.5px;color:var(--muted)">时长</label>
+          <select id="vid-length" style="width:auto">
+            <option value="33">约 2 秒（33 帧）</option>
+            <option value="49">约 3 秒（49 帧）</option>
+            <option value="81">约 5 秒（81 帧）</option>
+          </select>
+        </div>
+
+        <button class="btn primary" id="vid-go">开始生成</button>
+        <div class="status-line" id="vid-status"></div>
+        <div id="vid-error"></div>
+        <div class="hint">Wan2.2 是双 14B 模型接力，<b>很慢</b>，可能要半小时以上。先出图再出视频。</div>
+      </div>
+
+      <div class="card">
+        <div id="vid-result" class="empty">视频结果会出现在这里</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 选品 ================= -->
+  <section class="panel" id="panel-pick">
+    <div class="card">
+      <div class="row" style="margin-bottom:14px">
+        <b style="font-size:14px">候选池</b>
+        <span class="muted">编辑 candidates.toml 后点刷新</span>
+        <div class="spacer"></div>
+        <button class="btn small" id="pick-refresh">刷新</button>
+      </div>
+      <div id="pick-body"><div class="empty">加载中…</div></div>
+    </div>
+  </section>
+
+  <!-- ================= 发布 ================= -->
+  <section class="panel" id="panel-pub">
+    <div class="card">
+      <label class="field">
+        <span>素材目录（一个商品一个文件夹）</span>
+        <div class="row">
+          <input type="text" id="pub-dir" placeholder="D:\MxPage\output" style="flex:1">
+          <button class="btn" id="pub-scan">扫描</button>
+        </div>
+      </label>
+      <div id="pub-scan-result"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="row" style="margin-bottom:14px">
+        <label style="font-size:12.5px;color:var(--muted)">平台</label>
+        <div id="pub-platforms" class="row"></div>
+        <div class="spacer"></div>
+        <label style="font-size:12.5px;color:var(--muted)">形态</label>
+        <select id="pub-kind" style="width:auto">
+          <option value="note">图文</option>
+          <option value="video">视频</option>
+        </select>
+        <button class="btn primary" id="pub-plan">生成发布计划</button>
+      </div>
+      <div id="pub-plans"><div class="empty">先扫描目录，再生成发布计划</div></div>
+      <div class="hint">
+        这里只<b>打印命令</b>，不执行。真正的发布要在命令行里跑，而且要先登录账号。
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var $ = function(id){ return document.getElementById(id); };
+  var state = { genPath:null, vidPath:null, manifest:null };
+
+  /* ---------------- 状态条 ---------------- */
+  function refreshChips(){
+    fetch("/api/status").then(function(r){ return r.json(); }).then(function(s){
+      var chips = [];
+      chips.push(chip(s.comfy ? "ok":"bad", "ComfyUI"));
+      chips.push(chip(s.image_model ? "ok":"bad", s.image_model ? "图像模型就绪" : "图像模型缺失"));
+      chips.push(chip(s.video_model ? "ok":"", s.video_model ? "视频模型就绪" : "视频模型缺失"));
+      chips.push(chip(s.accounts && Object.keys(s.accounts).length ? "ok":"" , "发布账号"));
+      $("chips").innerHTML = chips.join("");
+      window.__platforms = s.platforms || [];
+      window.__accounts = s.accounts || {};
+      renderPlatformChoices();
+    }).catch(function(){
+      $("chips").innerHTML = chip("bad", "服务未响应");
+    });
+  }
+  function chip(cls, text){
+    return '<span class="chip ' + cls + '"><i></i>' + text + '</span>';
+  }
+
+  /* ---------------- 标签页 ---------------- */
+  document.querySelectorAll("nav button").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      document.querySelectorAll("nav button").forEach(function(b){ b.classList.remove("active"); });
+      document.querySelectorAll(".panel").forEach(function(p){ p.classList.remove("active"); });
+      btn.classList.add("active");
+      $("panel-" + btn.dataset.tab).classList.add("active");
+      if(btn.dataset.tab === "pick") loadCandidates();
+    });
+  });
+
+  /* ---------------- 上传 ---------------- */
+  function wireDrop(dropId, fileId, onDone){
+    var drop = $(dropId), file = $(fileId);
+    drop.addEventListener("click", function(){ file.click(); });
+    file.addEventListener("change", function(){ if(file.files[0]) upload(file.files[0], onDone); });
+    ["dragenter","dragover"].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); });
+    });
+    ["dragleave","drop"].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); });
+    });
+    drop.addEventListener("drop", function(e){
+      var f = e.dataTransfer.files[0];
+      if(f) upload(f, onDone);
+    });
+  }
+
+  function upload(file, onDone){
+    fetch("/api/upload", {
+      method:"POST",
+      headers:{ "X-Filename": encodeURIComponent(file.name) },
+      body: file
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error){ alert(res.error); return; }
+      onDone(res);
+    }).catch(function(e){ alert("上传失败：" + e); });
+  }
+
+  /* ---------------- 出图 ---------------- */
+  wireDrop("gen-drop", "gen-file", function(res){
+    state.genPath = res.path;
+    $("gen-thumb").src = res.url;
+    $("gen-thumb-wrap").style.display = "block";
+    $("gen-thumb-meta").textContent = res.name;
+  });
+
+  $("gen-go").addEventListener("click", function(){
+    if(!state.genPath){ alert("先选一张商品原图"); return; }
+    var prompt = $("gen-prompt").value.trim();
+    if(!prompt){ alert("提示词不能为空"); return; }
+
+    $("gen-error").innerHTML = "";
+    $("gen-go").disabled = true;
+    setStatus("gen-status", true, "正在提交…");
+    $("gen-result").className = "empty";
+    $("gen-result").textContent = "排队中…";
+
+    fetch("/api/gen", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        source: state.genPath,
+        prompt: prompt,
+        size: parseInt($("gen-size").value, 10),
+        steps: parseInt($("gen-steps").value, 10)
+      })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) throw new Error(res.error);
+      poll(res.job.id, "gen");
+    }).catch(function(e){
+      $("gen-go").disabled = false;
+      setStatus("gen-status", false, "");
+      $("gen-error").innerHTML = '<div class="err">' + e.message + '</div>';
+      $("gen-result").className = "empty";
+      $("gen-result").textContent = "生成失败";
+    });
+  });
+
+  /* ---------------- 视频 ---------------- */
+  wireDrop("vid-drop", "vid-file", function(res){
+    state.vidPath = res.path;
+    $("vid-thumb").src = res.url;
+    $("vid-thumb-wrap").style.display = "block";
+    $("vid-thumb-meta").textContent = res.name;
+  });
+
+  $("vid-go").addEventListener("click", function(){
+    if(!state.vidPath){ alert("先选一张起始图"); return; }
+    var prompt = $("vid-prompt").value.trim();
+    if(!prompt){ alert("提示词不能为空"); return; }
+
+    $("vid-error").innerHTML = "";
+    $("vid-go").disabled = true;
+    setStatus("vid-status", true, "正在提交…");
+    $("vid-result").className = "empty";
+    $("vid-result").textContent = "排队中…";
+
+    fetch("/api/vid", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        source: state.vidPath,
+        prompt: prompt,
+        length: parseInt($("vid-length").value, 10)
+      })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) throw new Error(res.error);
+      poll(res.job.id, "vid");
+    }).catch(function(e){
+      $("vid-go").disabled = false;
+      setStatus("vid-status", false, "");
+      $("vid-error").innerHTML = '<div class="err">' + e.message + '</div>';
+      $("vid-result").className = "empty";
+      $("vid-result").textContent = "生成失败";
+    });
+  });
+
+  /* ---------------- 轮询 ---------------- */
+  function setStatus(id, spinning, text){
+    var el = $(id);
+    el.innerHTML = (spinning ? '<span class="spinner"></span>' : '') + '<span>' + text + '</span>';
+  }
+
+  function poll(jobId, which){
+    var timer = setInterval(function(){
+      fetch("/api/job?id=" + jobId).then(function(r){ return r.json(); }).then(function(j){
+        if(j.status === "running" || j.status === "queued"){
+          setStatus(which + "-status", true, (j.message || "处理中") + "　已用 " + j.elapsed + " 秒");
+          return;
+        }
+        clearInterval(timer);
+        $(which + "-go").disabled = false;
+
+        if(j.status === "error"){
+          setStatus(which + "-status", false, "");
+          $(which + "-error").innerHTML = '<div class="err">' + (j.error || "未知错误") + '</div>';
+          $(which + "-result").className = "empty";
+          $(which + "-result").textContent = "生成失败";
+          return;
+        }
+
+        setStatus(which + "-status", false, "完成，用时 " + j.elapsed + " 秒");
+        if(which === "gen"){
+          $("gen-result").className = "";
+          $("gen-result").innerHTML =
+            '<img class="thumb" src="' + j.result.url + '" alt="">' +
+            '<div class="row" style="margin-top:12px">' +
+              '<a class="file-link" href="' + j.result.url + '" download>下载</a>' +
+              '<div class="spacer"></div>' +
+              '<button class="btn small" id="to-vid">用这张做视频 →</button>' +
+            '</div>';
+          $("to-vid").addEventListener("click", function(){
+            state.vidPath = j.result.path;
+            $("vid-thumb").src = j.result.url;
+            $("vid-thumb-wrap").style.display = "block";
+            $("vid-thumb-meta").textContent = j.result.name;
+            document.querySelector('nav button[data-tab="vid"]').click();
+          });
+        }else{
+          $("vid-result").className = "";
+          $("vid-result").innerHTML =
+            '<video class="thumb" controls src="' + j.result.url + '"></video>' +
+            '<div class="row" style="margin-top:12px">' +
+              '<a class="file-link" href="' + j.result.url + '" download>下载</a>' +
+            '</div>';
+        }
+      });
+    }, 2000);
+  }
+
+  /* ---------------- 选品 ---------------- */
+  function loadCandidates(){
+    fetch("/api/candidates").then(function(r){ return r.json(); }).then(function(d){
+      var body = $("pick-body");
+      if(!d.exists){
+        body.innerHTML = '<div class="empty">还没有 candidates.toml。<br>在命令行跑 <b>python -m pipeline pick init</b> 生成模板。</div>';
+        return;
+      }
+      if(!d.rows.length){
+        body.innerHTML = '<div class="empty">候选池是空的。</div>';
+        return;
+      }
+      var html = '<table><thead><tr>' +
+        '<th>#</th><th>候选品</th><th class="num">总分</th><th>评级</th>' +
+        '<th class="num">售价</th><th class="num">毛利率</th><th class="num">单件毛利</th>' +
+        '<th>否决项</th></tr></thead><tbody>';
+      d.rows.forEach(function(r){
+        html += '<tr>' +
+          '<td class="num">' + r.rank + '</td>' +
+          '<td>' + esc(r.name) + '</td>' +
+          '<td class="num">' + Number(r.total).toFixed(1) + '</td>' +
+          '<td><span class="grade g-' + r.grade + '">' + r.grade + '</span></td>' +
+          '<td class="num">¥' + r.price + '</td>' +
+          '<td class="num">' + Number(r.rate).toFixed(1) + '%</td>' +
+          '<td class="num">¥' + Number(r.profit).toFixed(1) + '</td>' +
+          '<td>' + (r.veto ? esc(r.veto) : '—') + '</td>' +
+        '</tr>';
+      });
+      html += '</tbody></table>';
+      if(d.advice) html += '<div class="advice">' + esc(d.advice) + '</div>';
+      body.innerHTML = html;
+    });
+  }
+  $("pick-refresh").addEventListener("click", loadCandidates);
+
+  /* ---------------- 发布 ---------------- */
+  function renderPlatformChoices(){
+    var box = $("pub-platforms");
+    if(!box || !window.__platforms) return;
+    box.innerHTML = window.__platforms.map(function(p){
+      var has = window.__accounts && window.__accounts[p];
+      return '<label style="font-size:12.5px;display:flex;align-items:center;gap:5px">' +
+        '<input type="checkbox" value="' + p + '" checked> ' + p +
+        (has ? '' : ' <span style="color:#a8271f;font-size:11px">未配账号</span>') +
+        '</label>';
+    }).join("");
+  }
+
+  $("pub-scan").addEventListener("click", function(){
+    var dir = $("pub-dir").value.trim();
+    if(!dir){ alert("填写素材目录"); return; }
+    $("pub-scan-result").innerHTML = '<div class="muted">扫描中…</div>';
+    fetch("/api/ingest", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ dir: dir })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) throw new Error(res.error);
+      state.manifest = res.manifest;
+      var html = '<div class="muted" style="margin:10px 0">识别到 <b>' + res.count + '</b> 个商品：</div>' +
+        '<table><thead><tr><th>商品</th><th class="num">图片</th><th>正文</th><th>标签</th></tr></thead><tbody>';
+      res.products.forEach(function(p){
+        html += '<tr><td>' + esc(p.name) + '</td>' +
+          '<td class="num">' + p.images + '</td>' +
+          '<td>' + (p.has_body ? '有' : '<span style="color:#a35a06">缺</span>') + '</td>' +
+          '<td>' + (p.has_tags ? '有' : '<span style="color:#a35a06">缺</span>') + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      $("pub-scan-result").innerHTML = html;
+    }).catch(function(e){
+      $("pub-scan-result").innerHTML = '<div class="err">' + e.message + '</div>';
+    });
+  });
+
+  $("pub-plan").addEventListener("click", function(){
+    if(!state.manifest){ alert("先扫描目录"); return; }
+    var platforms = Array.prototype.slice.call(
+      document.querySelectorAll("#pub-platforms input:checked")).map(function(i){ return i.value; });
+    if(!platforms.length){ alert("至少选一个平台"); return; }
+
+    fetch("/api/publish", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        manifest: state.manifest,
+        platforms: platforms,
+        kind: $("pub-kind").value
+      })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) throw new Error(res.error);
+      var html = '';
+      res.plans.forEach(function(p){
+        html += '<div class="plan-head"><b>' + esc(p.name) + '</b> · ' + p.platform + '</div>';
+        if(p.error){
+          html += '<pre class="cmd" style="color:#ff9b8f">' + esc(p.error) + '</pre>';
+        }else{
+          html += '<pre class="cmd">' + esc(p.command) + '</pre>';
+          (p.warnings || []).forEach(function(w){
+            html += '<div class="muted" style="color:#a35a06;margin-bottom:8px">⚠ ' + esc(w) + '</div>';
+          });
+        }
+      });
+      html += '<div class="advice">共 ' + res.plans.length + ' 条计划。' +
+        (res.dry_run ? ' dry_run 已开启，需要真正发布请在命令行加 --execute。' : '') + '</div>';
+      $("pub-plans").innerHTML = html;
+    }).catch(function(e){
+      $("pub-plans").innerHTML = '<div class="err">' + e.message + '</div>';
+    });
+  });
+
+  function esc(s){
+    return String(s == null ? "" : s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  /* ---------------- 启动 ---------------- */
+  refreshChips();
+  setInterval(refreshChips, 15000);
+  loadCandidates();
+})();
+</script>
+</body>
+</html>
