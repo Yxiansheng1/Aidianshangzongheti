@@ -563,7 +563,7 @@
     h += '<h3 style="font-size:14px;margin:18px 0 8px">小红书文案</h3>';
     h += '<div style="font-size:13px"><b>' + esc(x.title || '') + '</b><br><br>' +
          esc(x.body || '').replace(/\n/g, '<br>') + '<br><br>' +
-         (x.tags || []).map(function(t){ return '#' + esc(t); }).join(' ') + '</div>';
+         (x.tags || []).map(function(t){ return '#' + String(t).replace(/^#+/, ''); }).join(' ') + '</div>';
 
     $("an-result").className = "";
     $("an-result").innerHTML = h;

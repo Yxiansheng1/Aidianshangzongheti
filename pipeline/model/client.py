@@ -70,12 +70,12 @@ class OpenAICompatible:
         except (KeyError, IndexError, TypeError) as exc:
             raise ModelError(f"响应结构异常：{str(data)[:300]}") from exc
 
-    def ask(self, prompt: str, system: str = "") -> str:
-        """单轮问答的快捷方式。"""
+    def ask(self, prompt: str, system: str = "", **kwargs: Any) -> str:
+        """单轮问答的快捷方式。kwargs 直接透传给 chat()，例如 max_tokens。"""
         if not self.text_model:
             raise ModelError("config.toml 里没有配置 model.text_model")
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        return self.chat(self.text_model, messages)
+        return self.chat(self.text_model, messages, **kwargs)

@@ -185,14 +185,30 @@ def analyze(brief: ProductBrief, cfg: Any) -> dict:
         timeout=max(cfg.model.timeout, 120),
         text_model=cfg.model.text_model,
     )
-    text = client.ask(build_prompt(brief), system=SYSTEM)
+    text = client.ask(
+        build_prompt(brief),
+        system=SYSTEM,
+        # 中转站的默认 max_tokens 常常只有 2000 左右，输出会被腰斩
+        max_tokens=6000,
+        temperature=0.6,
+    )
 
     try:
         data = json.loads(_strip_fence(text))
-    except json.JSONDecodeError as exc:
-        raise ModelError(
-            f"模型返回的不是合法 JSON（{exc}）。原始输出前 400 字：\n{text[:400]}"
-        ) from exc
+    except json.JSONDecodeError:
+        # 再试一次，明确要求只输出完整 JSON
+        text = client.ask(
+            build_prompt(brief) + "\n\n上一次输出被截断了。这次只输出一个**完整闭合**的 JSON 对象，不要任何其他内容。",
+            system=SYSTEM,
+            max_tokens=6000,
+            temperature=0.3,
+        )
+        try:
+            data = json.loads(_strip_fence(text))
+        except json.JSONDecodeError as exc:
+            raise ModelError(
+                f"模型两次都没返回合法 JSON（{exc}）。原始输出前 400 字：\n{text[:400]}"
+            ) from exc
 
     if not isinstance(data, dict):
         raise ModelError("模型返回的 JSON 不是对象")
@@ -236,6 +252,6 @@ def render_markdown(result: dict, brief: ProductBrief) -> str:
     xhs = result.get("xiaohongshu", {})
     lines += ["## 小红书文案", "", f"**{xhs.get('title', '')}**", "", xhs.get("body", ""), ""]
     if xhs.get("tags"):
-        lines += [" ".join(f"#{t}" for t in xhs["tags"]), ""]
+        lines += [" ".join(f"#{str(t).lstrip('#')}" for t in xhs["tags"]), ""]
 
     return "\n".join(lines)

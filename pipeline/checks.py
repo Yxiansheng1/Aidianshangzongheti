@@ -147,16 +147,16 @@ def run_check(cfg: AppConfig) -> int:
 
     # 7. 发布账号登录态
     if cfg.platforms and cfg.sau_cwd:
-        for platform in cfg.platforms:
-            account = cfg.accounts.get(platform, "")
+        for plat in cfg.platforms:
+            account = cfg.accounts.get(plat, "")
             if not account:
-                _line(WARN, f"账号 {platform}", "config.toml 里没有 [publish.accounts] 配置")
+                _line(WARN, f"账号 {plat}", "config.toml 里没有 [publish.accounts] 配置")
                 continue
-            cookie = Path(cfg.sau_cwd) / "cookies" / f"{platform}_{account}.json"
+            cookie = Path(cfg.sau_cwd) / "cookies" / f"{plat}_{account}.json"
             if cookie.is_file():
-                _line(OK, f"账号 {platform}", f"{cookie.name}（已登录过）")
+                _line(OK, f"账号 {plat}", f"{cookie.name}（已登录过）")
             else:
-                _line(WARN, f"账号 {platform}", f"未登录，跑 sau {platform} login --account {account} --headed")
+                _line(WARN, f"账号 {plat}", f"未登录，跑 sau {plat} login --account {account} --headed")
 
     print("-" * 64)
     if failures:
