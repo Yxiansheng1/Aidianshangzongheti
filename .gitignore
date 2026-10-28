@@ -1,0 +1,28 @@
+# ---- 密钥与本地配置（必须忽略）----
+config.toml
+*.local.toml
+.env
+.env.*
+
+# ---- 运行产物 ----
+manifest.json
+output/
+exports/
+logs/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

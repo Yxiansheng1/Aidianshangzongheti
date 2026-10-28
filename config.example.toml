@@ -1,0 +1,29 @@
+# 复制为 config.toml 后填写。config.toml 已被 .gitignore 忽略，不会进仓库。
+
+[model]
+# 第一阶段可以直接填供应商官方地址；第二阶段换成 one-api 的本地地址即可，业务代码不用改。
+base_url = "https://api.deepseek.com"
+api_key = "sk-在这里填"
+# 文本模型：用于润色标题、正文、标签
+text_model = "deepseek-chat"
+# 图像模型：必须支持「参考图输入」，否则做不了商品图
+image_model = ""
+
+[mxpage]
+# MxPage 导出目录。约定：一个商品一个子文件夹，文件夹名 = 商品名
+output_dir = "D:\\MxPage\\output"
+
+[publish]
+# social-auto-upload 的 CLI 命令名或绝对路径
+sau_cmd = "sau"
+# 默认发布目标
+platforms = ["xiaohongshu"]
+# true = 只打印计划不执行，建议一直保持 true 直到你确认参数正确
+dry_run = true
+
+# 每个平台的命令模板。
+# {sau} {platform} {images} {title} {desc} {tags} 会被替换。
+# 注意：social-auto-upload 的真实参数在「安装清单」第 2 步验证后确定，届时修改这里即可。
+[publish.templates]
+xiaohongshu = '{sau} xiaohongshu upload --images "{images}" --title "{title}" --desc "{desc}" --tags "{tags}"'
+douyin = '{sau} douyin upload --images "{images}" --title "{title}" --desc "{desc}" --tags "{tags}"'
