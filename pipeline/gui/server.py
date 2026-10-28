@@ -231,6 +231,39 @@ def do_ingest(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def do_analyze(params: dict[str, Any]) -> dict[str, Any]:
+    from ..analyze import ProductBrief, analyze, render_markdown
+    from ..fetch import FetchError, fetch
+
+    cfg = load_config()
+    brief = ProductBrief(
+        name=str(params.get("name") or ""),
+        url=str(params.get("url") or ""),
+        price=str(params.get("price") or ""),
+        description=str(params.get("desc") or ""),
+        extra=str(params.get("extra") or ""),
+    )
+
+    note = ""
+    if brief.url:
+        try:
+            page = fetch(brief.url)
+            brief.site = page.site
+            brief.fetch_note = page.note
+            brief.name = brief.name or page.title
+            brief.description = brief.description or page.description
+            brief.price = brief.price or page.price
+            note = page.note
+        except FetchError as exc:
+            note = str(exc)
+
+    if not (brief.name or brief.description or brief.extra):
+        raise ValueError("至少要填商品名或描述（链接多半抓不到）")
+
+    result = analyze(brief, cfg)
+    return {"result": result, "markdown": render_markdown(result, brief), "note": note}
+
+
 def do_package(params: dict[str, Any]) -> dict[str, Any]:
     from ..listing import build_all
 
@@ -401,6 +434,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/package":
                 self._json(do_package(payload))
+                return
+
+            if route == "/api/analyze":
+                self._json(do_analyze(payload))
                 return
 
             self._json({"error": "not found"}, 404)

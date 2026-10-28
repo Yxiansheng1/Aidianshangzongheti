@@ -115,6 +115,7 @@
   <nav>
     <button data-tab="gen" class="active">出图</button>
     <button data-tab="vid">视频</button>
+    <button data-tab="analyze">分析</button>
     <button data-tab="pick">选品</button>
     <button data-tab="pub">发布</button>
   </nav>
@@ -198,6 +199,45 @@
       <div class="card">
         <div id="vid-result" class="empty">视频结果会出现在这里</div>
       </div>
+    </div>
+  </section>
+
+  <!-- ================= 分析 ================= -->
+  <section class="panel" id="panel-analyze">
+    <div class="card">
+      <label class="field">
+        <span>商品链接（可选）</span>
+        <input type="text" id="an-url" placeholder="https://detail.1688.com/offer/xxx.html">
+      </label>
+      <div class="row" style="gap:14px">
+        <label class="field" style="flex:1">
+          <span>商品名</span>
+          <input type="text" id="an-name" placeholder="渐变杯装蜡烛">
+        </label>
+        <label class="field" style="flex:1">
+          <span>价格 / 成本</span>
+          <input type="text" id="an-price" placeholder="售价 89，代发 32">
+        </label>
+      </div>
+      <label class="field">
+        <span>页面描述 / 参数（链接抓不到时靠这个）</span>
+        <textarea id="an-desc" placeholder="从商品页复制：材质、尺寸、卖点、规格……"></textarea>
+      </label>
+      <label class="field">
+        <span>补充信息</span>
+        <textarea id="an-extra" placeholder="代发价、竞品情况、你的判断、目标人群……" style="min-height:62px"></textarea>
+      </label>
+      <button class="btn primary" id="an-go">开始分析</button>
+      <div class="status-line" id="an-status"></div>
+      <div id="an-error"></div>
+      <div class="hint">
+        分析需要文本模型（config.toml 的 <b>[model]</b>）。没配会提示去哪申请。<br>
+        <b>链接多数抓不到</b> —— 淘宝/1688 要登录态。抓不到就用商品名 + 描述补，一样能分析。
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div id="an-result" class="empty">分析结果会出现在这里</div>
     </div>
   </section>
 
@@ -446,6 +486,99 @@
         }
       });
     }, 2000);
+  }
+
+  /* ---------------- 分析 ---------------- */
+  $("an-go").addEventListener("click", function(){
+    var payload = {
+      url: $("an-url").value.trim(),
+      name: $("an-name").value.trim(),
+      price: $("an-price").value.trim(),
+      desc: $("an-desc").value.trim(),
+      extra: $("an-extra").value.trim()
+    };
+    if(!payload.url && !payload.name && !payload.desc && !payload.extra){
+      alert("至少填商品名或描述"); return;
+    }
+    $("an-error").innerHTML = "";
+    $("an-go").disabled = true;
+    setStatus("an-status", true, "分析中，约 20-40 秒…");
+    $("an-result").className = "empty";
+    $("an-result").textContent = "分析中…";
+
+    fetch("/api/analyze", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(res){
+      $("an-go").disabled = false;
+      if(res.error) throw new Error(res.error);
+      setStatus("an-status", false, res.note ? ("完成。链接提示：" + res.note) : "完成");
+      renderAnalysis(res.result);
+    }).catch(function(e){
+      $("an-go").disabled = false;
+      setStatus("an-status", false, "");
+      $("an-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      $("an-result").className = "empty";
+      $("an-result").textContent = "分析失败";
+    });
+  });
+
+  function block(title, html){
+    return '<div style="margin-bottom:12px"><div class="muted" style="font-weight:600">' + title +
+           '</div><div>' + html + '</div></div>';
+  }
+  function listBlock(title, items){
+    if(!items || !items.length) return block(title, '—');
+    return block(title, items.map(function(i){ return '· ' + esc(i); }).join('<br>'));
+  }
+  function promptRow(kind, i, item){
+    return '<div style="margin-bottom:12px">' +
+      '<div class="row" style="margin-bottom:4px"><span class="muted" style="font-weight:600">' +
+      (i+1) + '. ' + esc(item.name) + '</span><span class="spacer"></span>' +
+      '<button class="btn small" data-use="1" data-kind="' + kind + '" data-prompt="' + esc(item.prompt) +
+      '">用这条' + (kind==='gen' ? '出图' : '出视频') + '</button></div>' +
+      '<pre class="cmd">' + esc(item.prompt) + '</pre></div>';
+  }
+
+  function renderAnalysis(r){
+    var h = '';
+    var v = r.verdict || {};
+    h += '<div class="advice" style="margin-bottom:16px"><b>结论：' + esc(v.grade || '') +
+         '</b>　' + esc(v.reason || '') + '</div>';
+    h += block('定位', esc(r.positioning || '—'));
+    h += block('目标人群', esc(r.audience || '—'));
+    h += listBlock('核心卖点', r.selling_points);
+    h += listBlock('差异点', r.differentiation);
+    h += listBlock('售后风险', r.after_sale_risks);
+    var p = r.pricing || {};
+    h += block('定价', '<b>' + esc(p.suggest || '—') + '</b>　' + esc(p.reason || ''));
+    h += listBlock('搜索词', r.search_keywords);
+
+    h += '<h3 style="font-size:14px;margin:18px 0 8px">生图提示词</h3>';
+    (r.image_prompts || []).forEach(function(item, i){ h += promptRow('gen', i, item); });
+    h += '<h3 style="font-size:14px;margin:18px 0 8px">视频提示词</h3>';
+    (r.video_prompts || []).forEach(function(item, i){ h += promptRow('vid', i, item); });
+
+    var x = r.xiaohongshu || {};
+    h += '<h3 style="font-size:14px;margin:18px 0 8px">小红书文案</h3>';
+    h += '<div style="font-size:13px"><b>' + esc(x.title || '') + '</b><br><br>' +
+         esc(x.body || '').replace(/\n/g, '<br>') + '<br><br>' +
+         (x.tags || []).map(function(t){ return '#' + esc(t); }).join(' ') + '</div>';
+
+    $("an-result").className = "";
+    $("an-result").innerHTML = h;
+
+    document.querySelectorAll('#an-result [data-use]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        if(btn.dataset.kind === 'gen'){
+          $("gen-prompt").value = btn.dataset.prompt;
+          document.querySelector('nav button[data-tab="gen"]').click();
+        }else{
+          $("vid-prompt").value = btn.dataset.prompt;
+          document.querySelector('nav button[data-tab="vid"]').click();
+        }
+      });
+    });
   }
 
   /* ---------------- 选品 ---------------- */

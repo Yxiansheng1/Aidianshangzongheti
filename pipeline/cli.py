@@ -228,6 +228,64 @@ def _cmd_gui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_analyze(args: argparse.Namespace) -> int:
+    from .analyze import ProductBrief, analyze, build_prompt, render_markdown
+    from .fetch import FetchError, fetch
+    from .model.client import ModelError
+
+    cfg = load_config(args.config)
+    brief = ProductBrief(
+        name=args.name or "",
+        url=args.url or "",
+        price=args.price or "",
+        description=args.desc or "",
+        extra=args.extra or "",
+    )
+
+    if args.url:
+        try:
+            page = fetch(args.url)
+        except FetchError as exc:
+            print(f"链接有问题：{exc}")
+            return 2
+        brief.site = page.site
+        brief.fetch_note = page.note
+        brief.name = brief.name or page.title
+        brief.description = brief.description or page.description
+        brief.price = brief.price or page.price
+        if not page.ok:
+            print(f"⚠ {page.note}")
+            print("  用 --name / --desc / --extra 补充信息，否则分析会很空。\n")
+
+    if not (brief.name or brief.description or brief.extra):
+        print("没有商品信息。至少给一个：--url / --name / --desc / --extra")
+        return 2
+
+    if args.dry_run:
+        print("=== 将发给模型的提示词 ===")
+        print(build_prompt(brief))
+        return 0
+
+    try:
+        result = analyze(brief, cfg)
+    except ModelError as exc:
+        print(f"失败：{exc}")
+        return 1
+
+    markdown = render_markdown(result, brief)
+    out = Path(args.out or (Path("output") / "分析" / f"{(brief.name or '商品')[:20]}.md"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(markdown, encoding="utf-8")
+    out.with_suffix(".json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    print(markdown)
+    print(f"\n已保存：{out.resolve()}")
+    print(f"         {out.with_suffix('.json').resolve()}")
+    return 0
+
+
 def _cmd_package(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     manifest_path = Path(args.manifest)
@@ -378,6 +436,17 @@ def main(argv: list[str] | None = None) -> int:
     p_pkg.add_argument("--manifest", default="manifest.json")
     p_pkg.add_argument("--out", help="输出目录，默认 output/上架包")
     p_pkg.set_defaults(func=_cmd_package)
+
+    p_an = sub.add_parser("analyze", help="商品分析 + 生图/视频文案（需要文本模型）")
+    _add_config(p_an)
+    p_an.add_argument("--url", help="商品链接。抓不到内容时会提示你补充")
+    p_an.add_argument("--name", help="商品名")
+    p_an.add_argument("--price", help="售价或成本")
+    p_an.add_argument("--desc", help="商品描述/参数，可以从页面复制")
+    p_an.add_argument("--extra", help="任何补充信息：材质、人群、竞品、你的判断")
+    p_an.add_argument("--out", help="输出 md 路径")
+    p_an.add_argument("--dry-run", action="store_true", help="只打印提示词，不调模型")
+    p_an.set_defaults(func=_cmd_analyze)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)

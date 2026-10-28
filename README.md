@@ -33,19 +33,21 @@
 ## 拼装关系
 
 ```
-① 选品   pick     候选池打分排序（数据你录入，模块只做判断）
+① 分析   analyze  商品 → 分析 + 生图/视频提示词 + 小红书文案（需文本模型）
         ↓
-② 出图   gen      ComfyUI + Qwen-Image-Edit   0 元，约 8 分钟/张
+② 选品   pick     候选池打分排序（数据你录入，模块只做判断）
         ↓
-③ 出视频 vid      ComfyUI + Wan2.2 I2V        0 元，很慢
+③ 出图   gen      ComfyUI + Qwen-Image-Edit   0 元，约 8 分钟/张
         ↓
-④ 整理   输出目录（每个商品一个文件夹）
+④ 出视频 vid      ComfyUI + Wan2.2 I2V        0 元，很慢
         ↓
-⑤ 清单   ingest   读目录 → manifest.json
+⑤ 整理   输出目录（每个商品一个文件夹）
         ↓
-⑥ 发布   publish  调 social-auto-upload → 小红书 / 知乎 / 抖音 / 快手 / B站 / 视频号…
+⑥ 清单   ingest   读目录 → manifest.json
         ↓
-⑦ 上架   package  生成淘宝/拼多多上架资料包（不是一键上货，见 docs/06）
+⑦ 发布   publish  调 social-auto-upload → 小红书 / 知乎 / 抖音 / 快手 / B站 / 视频号…
+        ↓
+⑧ 上架   package  生成淘宝/拼多多上架资料包（不是一键上货，见 docs/06）
 ```
 
 **设计原则：模型的、平台的，全都藏在适配层后面。** 换本地/云端、换平台，主流程不动。
@@ -79,27 +81,32 @@ python -m pipeline check
 # 0. 启动 ComfyUI（8GB 显存用这个）
 D:\AI\ComfyUI_windows_portable\Start_Wan_8GB.bat
 
-# 1. 选品：生成候选池 → 填 → 排序
+# 1. 分析：商品 → 卖点/风险/定价 + 生图与视频提示词（需文本模型 key）
+python -m pipeline analyze --name "渐变杯装蜡烛" `
+    --desc "手作大豆蜡，燃烧约25小时，渐变玻璃杯身" `
+    --extra "1688 代发 32 元，三家现货"
+
+# 2. 选品：生成候选池 → 填 → 排序
 python -m pipeline pick init
 python -m pipeline pick rank --top 2
 
-# 2. 出图：商品原图 → 场景主图
+# 3. 出图：商品原图 → 场景主图
 python -m pipeline gen --image "商品原图.png" `
     --prompt "放在浅色木纹桌面，清晨侧光，浅景深，商品保持原样"
 
-# 3. 出视频：主图 → 短视频
+# 4. 出视频：主图 → 短视频
 python -m pipeline vid --image "商品原图-场景.png" `
     --prompt "镜头缓慢推进，光影缓慢变化"
 
-# 4. 扫目录，生成发布清单
+# 5. 扫目录，生成发布清单
 python -m pipeline ingest --dir "D:\MxPage\output"
 
-# 5. 发布（默认只打印，不执行）
+# 6. 发布（默认只打印，不执行）
 python -m pipeline publish --platform xiaohongshu --kind note
 python -m pipeline publish --platform zhihu --kind note
 python -m pipeline publish --platform xiaohongshu --kind note --execute
 
-# 6. 上架资料包（淘宝/拼多多上架前准备，不是一键上货）
+# 7. 上架资料包（淘宝/拼多多上架前准备，不是一键上货）
 python -m pipeline package
 ```
 
