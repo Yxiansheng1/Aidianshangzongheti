@@ -29,17 +29,35 @@ height = 1024
 # 单张最长等待秒数。8GB 显存首次加载模型可能要几分钟。
 wait_timeout = 900
 
+# --- 视频（Wan2.2 图生视频，双模型接力）---
+wan_unet_high = "Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf"
+wan_unet_low = "Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf"
+wan_clip = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+wan_vae = "wan_2.1_vae.safetensors"
+wan_clip_vision = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+video_width = 480
+video_height = 832
+# 帧数必须是 4n+1：33≈2秒，49≈3秒，81≈5秒（16fps）
+video_length = 33
+video_fps = 16
+video_steps = 20
+video_cfg = 3.5
+video_shift = 8.0
+# 视频很慢，默认等 40 分钟
+video_timeout = 2400
+
 [publish]
-# social-auto-upload 的 CLI 命令名或绝对路径
+# social-auto-upload 的启动命令。装好以后通常是 "sau"；
+# 如果没装成全局命令，填完整路径，例如 "D:\\social-auto-upload\\.venv\\Scripts\\sau.exe"
 sau_cmd = "sau"
+# sau 的工作目录。它内部要 import conf，所以必须能在这里找到 conf.py
+sau_cwd = "D:\\social-auto-upload"
 # 默认发布目标
 platforms = ["xiaohongshu"]
-# true = 只打印计划不执行，建议一直保持 true 直到你确认参数正确
+# true = 只打印计划不执行。建议一直保持 true 直到你确认参数正确
 dry_run = true
 
-# 每个平台的命令模板。
-# {sau} {platform} {images} {title} {desc} {tags} 会被替换。
-# 注意：social-auto-upload 的真实参数在「安装清单」第 2 步验证后确定，届时修改这里即可。
-[publish.templates]
-xiaohongshu = '{sau} xiaohongshu upload --images "{images}" --title "{title}" --desc "{desc}" --tags "{tags}"'
-douyin = '{sau} douyin upload --images "{images}" --title "{title}" --desc "{desc}" --tags "{tags}"'
+[publish.accounts]
+# 账号名是你在 `sau xiaohongshu login --account 什么名字` 时自己起的，两边必须一致
+xiaohongshu = "main"
+douyin = "main"

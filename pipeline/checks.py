@@ -86,6 +86,28 @@ def run_check(cfg: AppConfig) -> int:
                     _line(OK, label, want)
                 else:
                     _line(WARN, label, f"{want} 不在列表里")
+
+            # 视频三件套
+            video_missing = [u for u in (cfg.local.wan_unet_high, cfg.local.wan_unet_low) if u not in unets]
+            if video_missing:
+                _line(WARN, "本地视频模型", f"缺 {', '.join(video_missing)}")
+            else:
+                _line(OK, "本地视频模型", "Wan2.2 I2V 双模型齐全")
+            clip_options = local.node_options("CLIPLoader", "clip_name")
+            if cfg.local.wan_clip in clip_options:
+                _line(OK, "视频文本编码器", cfg.local.wan_clip)
+            else:
+                _line(WARN, "视频文本编码器", f"{cfg.local.wan_clip} 不在列表里")
+            vae_options = local.node_options("VAELoader", "vae_name")
+            if cfg.local.wan_vae in vae_options:
+                _line(OK, "视频 VAE", cfg.local.wan_vae)
+            else:
+                _line(WARN, "视频 VAE", f"{cfg.local.wan_vae} 不在列表里")
+            vision_options = local.node_options("CLIPVisionLoader", "clip_name")
+            if cfg.local.wan_clip_vision in vision_options:
+                _line(OK, "视频 CLIP Vision", cfg.local.wan_clip_vision)
+            else:
+                _line(WARN, "视频 CLIP Vision", f"{cfg.local.wan_clip_vision} 不在列表里")
         except ComfyError as exc:
             _line(WARN, "本地模型", str(exc).splitlines()[0])
 

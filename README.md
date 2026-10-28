@@ -33,24 +33,20 @@
 ## 拼装关系
 
 ```
-商品原图（手机拍一张就行）
+① 选品   pick     候选池打分排序（数据你录入，模块只做判断）
         ↓
-    ① 本地出图  ComfyUI + Qwen-Image-Edit   ← 0 元，约 8 分钟/张
+② 出图   gen      ComfyUI + Qwen-Image-Edit   0 元，约 8 分钟/张
         ↓
-    ② 可选：MxPage 做详情页长图 / 小红书图文 / 批量（需要云 API）
+③ 出视频 vid      ComfyUI + Wan2.2 I2V        0 元，很慢
         ↓
-    ③ 输出目录（每个商品一个文件夹）
+④ 整理   输出目录（每个商品一个文件夹）
         ↓
-    ④ ingest  读目录 → 生成 manifest.json
+⑤ 清单   ingest   读目录 → manifest.json
         ↓
-    ⑤ model   可选：润色标题 / 正文 / 标签
-        ↓
-    ⑥ publish 调 social-auto-upload 的 CLI
-        ↓
-    抖音 / 小红书 / 快手 / 视频号
+⑥ 发布   publish  调 social-auto-upload → 抖音 / 小红书 / 快手 / 视频号
 ```
 
-**设计原则：模型层和发布层都是适配层。** 本地换云端、换发布工具，都只改一个文件，主流程不动。
+**设计原则：模型的、平台的，全都藏在适配层后面。** 换本地/云端、换平台，主流程不动。
 
 ## 快速开始
 
@@ -65,16 +61,24 @@ python -m pipeline check
 # 0. 启动 ComfyUI（8GB 显存用这个）
 D:\AI\ComfyUI_windows_portable\Start_Wan_8GB.bat
 
-# 1. 出图：商品原图 → 场景图
-python -m pipeline gen --image "samples\测试商品-香薰蜡烛.png" `
-    --prompt "放在浅色木纹桌面，清晨侧光，浅景深，高级电商主图风格，商品保持原样"
+# 1. 选品：生成候选池 → 填 → 排序
+python -m pipeline pick init
+python -m pipeline pick rank --top 2
 
-# 2. 扫目录，生成发布清单
+# 2. 出图：商品原图 → 场景主图
+python -m pipeline gen --image "商品原图.png" `
+    --prompt "放在浅色木纹桌面，清晨侧光，浅景深，商品保持原样"
+
+# 3. 出视频：主图 → 短视频
+python -m pipeline vid --image "商品原图-场景.png" `
+    --prompt "镜头缓慢推进，光影缓慢变化"
+
+# 4. 扫目录，生成发布清单
 python -m pipeline ingest --dir "D:\MxPage\output"
 
-# 3. 发布（默认只打印，不执行）
-python -m pipeline publish --platform xiaohongshu
-python -m pipeline publish --platform xiaohongshu --execute
+# 5. 发布（默认只打印，不执行）
+python -m pipeline publish --platform xiaohongshu --kind note
+python -m pipeline publish --platform xiaohongshu --kind note --execute
 ```
 
 ## 目录

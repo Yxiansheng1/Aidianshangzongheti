@@ -6,6 +6,7 @@ config.toml
 
 # ---- 运行产物 ----
 manifest.json
+candidates.toml
 output/
 exports/
 logs/

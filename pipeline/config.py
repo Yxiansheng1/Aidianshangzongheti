@@ -39,6 +39,21 @@ class LocalConfig:
     height: int = 1024
     wait_timeout: int = 900
 
+    # --- 视频（Wan2.2 I2V，双模型接力）---
+    wan_unet_high: str = "Wan2.2-I2V-A14B-HighNoise-Q4_K_M.gguf"
+    wan_unet_low: str = "Wan2.2-I2V-A14B-LowNoise-Q4_K_M.gguf"
+    wan_clip: str = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+    wan_vae: str = "wan_2.1_vae.safetensors"
+    wan_clip_vision: str = "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    video_width: int = 480
+    video_height: int = 832
+    video_length: int = 33
+    video_fps: int = 16
+    video_steps: int = 20
+    video_cfg: float = 3.5
+    video_shift: float = 8.0
+    video_timeout: int = 2400
+
 
 @dataclass
 class AppConfig:
@@ -46,9 +61,10 @@ class AppConfig:
     local: LocalConfig = field(default_factory=LocalConfig)
     mxpage_output_dir: str = ""
     sau_cmd: str = "sau"
+    sau_cwd: str = ""
     platforms: list[str] = field(default_factory=list)
     dry_run: bool = True
-    templates: dict[str, str] = field(default_factory=dict)
+    accounts: dict[str, str] = field(default_factory=dict)
     source: Path | None = None
 
     @property
@@ -80,8 +96,9 @@ def load_config(path: Path | str | None = None) -> AppConfig:
 
     pub = data.get("publish", {})
     cfg.sau_cmd = pub.get("sau_cmd", cfg.sau_cmd)
+    cfg.sau_cwd = pub.get("sau_cwd", cfg.sau_cwd)
     cfg.platforms = list(pub.get("platforms", []))
     cfg.dry_run = bool(pub.get("dry_run", True))
-    cfg.templates = dict(pub.get("templates", {}))
+    cfg.accounts = dict(pub.get("accounts", {}))
 
     return cfg
