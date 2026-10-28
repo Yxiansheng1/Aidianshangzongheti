@@ -43,7 +43,9 @@
         ↓
 ⑤ 清单   ingest   读目录 → manifest.json
         ↓
-⑥ 发布   publish  调 social-auto-upload → 抖音 / 小红书 / 快手 / 视频号
+⑥ 发布   publish  调 social-auto-upload → 小红书 / 知乎 / 抖音 / 快手 / B站 / 视频号…
+        ↓
+⑦ 上架   package  生成淘宝/拼多多上架资料包（不是一键上货，见 docs/06）
 ```
 
 **设计原则：模型的、平台的，全都藏在适配层后面。** 换本地/云端、换平台，主流程不动。
@@ -94,8 +96,22 @@ python -m pipeline ingest --dir "D:\MxPage\output"
 
 # 5. 发布（默认只打印，不执行）
 python -m pipeline publish --platform xiaohongshu --kind note
+python -m pipeline publish --platform zhihu --kind note
 python -m pipeline publish --platform xiaohongshu --kind note --execute
+
+# 6. 上架资料包（淘宝/拼多多上架前准备，不是一键上货）
+python -m pipeline package
 ```
+
+## 能力边界
+
+| | 能自动 | 不能自动 |
+|---|---|---|
+| 出图 / 出视频 | ✅ 全自动，本地免费 | — |
+| 发内容（小红书/知乎/抖音…） | ✅ 命令级自动 | 首屏登录要人，有封号风险 |
+| 上货 | ⚠️ 资料准备全自动 | 录入千牛后台要人 |
+
+平台支持矩阵、知乎长文的特殊处理、为什么"一键上货"做不了 —— 见 `docs/06-平台与上货.md`。
 
 ## 目录
 

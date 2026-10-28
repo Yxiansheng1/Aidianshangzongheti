@@ -18,6 +18,7 @@ from .checks import run_check
 from .config import load_config
 from .ingest.mxpage import build_manifest, scan
 from .model.comfyui import ComfyClient, ComfyError, generate, generate_video
+from .listing import build_all as build_packages
 from .pick import store as pick_store
 from .pick.score import LABELS, WEIGHTS, rank as rank_candidates
 from .publish.sau import build_plan, resolve_sau, run
@@ -227,6 +228,29 @@ def _cmd_gui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_package(args: argparse.Namespace) -> int:
+    cfg = load_config(args.config)
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_file():
+        print(f"找不到清单 {manifest_path}，先跑 `python -m pipeline ingest`")
+        return 2
+
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not (data.get("products") or []):
+        print("清单里没有商品。")
+        return 2
+
+    out_root = Path(args.out or "output/上架包")
+    results = build_packages(data, out_root, cfg)
+
+    print(f"生成 {len(results)} 个上架包 → {out_root.resolve()}\n")
+    for item in results:
+        print(f"  · {item.name}  {item.images} 张图")
+        print(f"    {item.dir}")
+    print("\n打开每个包里的「上架指引.md」，照着做。")
+    return 0
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
 
@@ -273,6 +297,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
                     kind=kind,
                     schedule=args.schedule,
                     headed=args.headed,
+                    zhihu_category=cfg.zhihu_category,
                 )
             except (ValueError, FileNotFoundError) as exc:
                 print(f"[跳过] {platform:<12} {product.get('name')}：{exc}")
@@ -347,6 +372,12 @@ def main(argv: list[str] | None = None) -> int:
     p_gui.add_argument("--port", type=int, default=8899, help="端口，默认 8899")
     p_gui.add_argument("--open", action="store_true", help="自动打开浏览器")
     p_gui.set_defaults(func=_cmd_gui)
+
+    p_pkg = sub.add_parser("package", help="生成上架资料包（淘宝/拼多多上架前准备）")
+    _add_config(p_pkg)
+    p_pkg.add_argument("--manifest", default="manifest.json")
+    p_pkg.add_argument("--out", help="输出目录，默认 output/上架包")
+    p_pkg.set_defaults(func=_cmd_package)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)

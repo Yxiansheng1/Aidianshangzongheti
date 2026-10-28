@@ -53,11 +53,16 @@ sau_cmd = "sau"
 # sau 的工作目录。它内部要 import conf，所以必须能在这里找到 conf.py
 sau_cwd = "D:\\social-auto-upload"
 # 默认发布目标
-platforms = ["xiaohongshu"]
+platforms = ["xiaohongshu", "zhihu"]
 # true = 只打印计划不执行。建议一直保持 true 直到你确认参数正确
 dry_run = true
 
+# 知乎视频必填的「所属领域」，可选项见
+# D:\social-auto-upload\uploader\zhihu_uploader\constants.py
+zhihu_category = "家居生活"
+
 [publish.accounts]
-# 账号名是你在 `sau xiaohongshu login --account 什么名字` 时自己起的，两边必须一致
+# 账号名是你在 `sau <平台> login --account 什么名字` 时自己起的，两边必须一致
 xiaohongshu = "main"
 douyin = "main"
+zhihu = "main"

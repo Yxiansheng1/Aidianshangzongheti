@@ -17,7 +17,7 @@ from ..ingest.mxpage import build_manifest, scan
 from ..model.comfyui import ComfyClient, ComfyError, generate, generate_video
 from ..pick import store as pick_store
 from ..pick.score import LABELS, VETO_LABELS, rank as rank_candidates
-from ..publish.sau import build_plan, run as run_plan
+from ..publish.sau import build_plan, resolve_sau, run as run_plan
 
 UI_FILE = Path(__file__).with_name("ui.html")
 UPLOAD_DIR = ROOT / "input_uploads"
@@ -231,6 +231,25 @@ def do_ingest(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def do_package(params: dict[str, Any]) -> dict[str, Any]:
+    from ..listing import build_all
+
+    cfg = load_config()
+    manifest = params.get("manifest") or {}
+    if not (manifest.get("products") or []):
+        raise ValueError("先扫描目录")
+
+    out = Path(str(params.get("out") or (ROOT / "output" / "上架包")))
+    results = build_all(manifest, out, cfg)
+    return {
+        "out": str(out),
+        "packages": [
+            {"name": r.name, "dir": r.dir, "images": r.images, "files": r.files}
+            for r in results
+        ],
+    }
+
+
 def do_publish(params: dict[str, Any]) -> dict[str, Any]:
     cfg = load_config()
     products = (params.get("manifest") or {}).get("products") or []
@@ -238,6 +257,7 @@ def do_publish(params: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("先扫描目录")
     platforms = params.get("platforms") or cfg.platforms
     kind = params.get("kind") or "note"
+    sau_cmd = resolve_sau(cfg.sau_cmd, cfg.sau_cwd)
 
     plans = []
     for product in products:
@@ -249,7 +269,8 @@ def do_publish(params: dict[str, Any]) -> dict[str, Any]:
                 continue
             try:
                 plan = build_plan(product, platform, account=account,
-                                  sau_cmd=cfg.sau_cmd, kind=kind)
+                                  sau_cmd=cfg.sau_cmd, kind=kind,
+                                  zhihu_category=cfg.zhihu_category)
             except (ValueError, FileNotFoundError) as exc:
                 plans.append({"platform": platform, "name": product.get("name"), "error": str(exc)})
                 continue
@@ -376,6 +397,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/publish":
                 self._json(do_publish(payload))
+                return
+
+            if route == "/api/package":
+                self._json(do_package(payload))
                 return
 
             self._json({"error": "not found"}, 404)

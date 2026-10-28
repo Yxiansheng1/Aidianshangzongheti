@@ -222,9 +222,11 @@
         <div class="row">
           <input type="text" id="pub-dir" placeholder="D:\MxPage\output" style="flex:1">
           <button class="btn" id="pub-scan">扫描</button>
+          <button class="btn" id="pub-package">生成上架资料包</button>
         </div>
       </label>
       <div id="pub-scan-result"></div>
+      <div id="pub-package-result"></div>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -241,7 +243,9 @@
       </div>
       <div id="pub-plans"><div class="empty">先扫描目录，再生成发布计划</div></div>
       <div class="hint">
-        这里只<b>打印命令</b>，不执行。真正的发布要在命令行里跑，而且要先登录账号。
+        发布计划只<b>打印命令</b>，不执行——真正的发布要先登录账号，在命令行里跑。<br>
+        <b>上架资料包 ≠ 一键上货。</b>淘宝/拼多多的商品发布接口不对个人开放，能批量上架的都是持牌服务商。
+        资料包做的是把标题、卖点、详情、属性表、按顺序命名的主图全部备好，你在千牛里复制粘贴。
       </div>
     </div>
   </section>
@@ -517,8 +521,30 @@
     });
   });
 
-  $("pub-plan").addEventListener("click", function(){
+  $("pub-package").addEventListener("click", function(){
     if(!state.manifest){ alert("先扫描目录"); return; }
+    $("pub-package-result").innerHTML = '<div class="muted" style="margin-top:10px">生成中…</div>';
+    fetch("/api/package", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ manifest: state.manifest })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(res.error) throw new Error(res.error);
+      var html = '<div class="advice" style="margin-top:12px">已生成 ' + res.packages.length +
+        ' 个上架包 → ' + esc(res.out) +
+        '<br><span style="font-size:12px">打开每个包里的「上架指引.md」照着做，复制粘贴约 5 分钟一个品。</span></div>';
+      html += '<table style="margin-top:12px"><thead><tr><th>商品</th><th class="num">主图</th><th>输出目录</th></tr></thead><tbody>';
+      res.packages.forEach(function(p){
+        html += '<tr><td>' + esc(p.name) + '</td><td class="num">' + p.images +
+          '</td><td style="font-size:12px;word-break:break-all">' + esc(p.dir) + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      $("pub-package-result").innerHTML = html;
+    }).catch(function(e){
+      $("pub-package-result").innerHTML = '<div class="err" style="margin-top:10px">' + e.message + '</div>';
+    });
+  });
+
+  $("pub-plan").addEventListener("click", function(){    if(!state.manifest){ alert("先扫描目录"); return; }
     var platforms = Array.prototype.slice.call(
       document.querySelectorAll("#pub-platforms input:checked")).map(function(i){ return i.value; });
     if(!platforms.length){ alert("至少选一个平台"); return; }

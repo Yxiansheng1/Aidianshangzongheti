@@ -65,6 +65,7 @@ class AppConfig:
     platforms: list[str] = field(default_factory=list)
     dry_run: bool = True
     accounts: dict[str, str] = field(default_factory=dict)
+    zhihu_category: str = "家居生活"
     source: Path | None = None
 
     @property
@@ -100,5 +101,6 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     cfg.platforms = list(pub.get("platforms", []))
     cfg.dry_run = bool(pub.get("dry_run", True))
     cfg.accounts = dict(pub.get("accounts", {}))
+    cfg.zhihu_category = pub.get("zhihu_category", cfg.zhihu_category)
 
     return cfg
