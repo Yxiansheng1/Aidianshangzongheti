@@ -120,6 +120,24 @@ python -m pipeline package
 
 平台支持矩阵、知乎长文的特殊处理、为什么"一键上货"做不了 —— 见 `docs/06-平台与上货.md`。
 
+## 编排层（可选）
+
+流程不在 Python 里，在 n8n 画布上：
+
+```powershell
+# 顺序：ComfyUI → 工作台 → n8n
+启动工作台.bat
+启动n8n.bat          # http://localhost:5678
+```
+
+- 工作流：`workflows/ecom-gen-video.json`（进仓库，可 diff、可回滚）
+- 能力清单：`http://127.0.0.1:8899/api/tools`
+- 账号与细节：`docs/08-编排-n8n.md`
+
+**真正决定"可复用"的是 `/api/*` 这套契约，不是编排工具。** 换掉 n8n，能力层一行不用改。
+
+⚠️ n8n 是 Sustainable Use License（不是 MIT）：自己用、拿它给客户做服务都可以，**但不能把 n8n 本身当产品卖**。要卖产品，底座换 MIT 的（OpenClaw / Hermes Agent）。
+
 ## 目录
 
 ```

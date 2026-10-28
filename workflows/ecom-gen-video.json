@@ -1,0 +1,618 @@
+{
+  "name": "电商 · 出图→出视频",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "4d608f44-90c2-4c7e-a4a5-0d88fa2c82e9",
+      "name": "手动开始",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "notes": "点上面的 Execute workflow 开始",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3a74e0c5-f960-46a7-b15f-c4d76cc724a3",
+              "name": "source",
+              "value": "D:\\AIdianshangzongheti\\input_uploads\\在这里填图片绝对路径.png",
+              "type": "string"
+            },
+            {
+              "id": "f1a3ffd4-f638-4399-aba7-6d08c71af1c0",
+              "name": "imagePrompt",
+              "value": "把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，商品保持原样不变形",
+              "type": "string"
+            },
+            {
+              "id": "c6f736b0-ee18-4a2b-884b-03cd90cb42c9",
+              "name": "videoPrompt",
+              "value": "镜头缓慢推进，光线缓缓移动，画面安静高级",
+              "type": "string"
+            },
+            {
+              "id": "410a1422-7f17-416f-9df6-847512e6155d",
+              "name": "size",
+              "value": "1024",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b88b1ee2-1e87-4f51-9ac9-bd7fdc2bd3b5",
+      "name": "参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        300
+      ],
+      "notes": "跑之前改这里：原图路径 + 两个提示词",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8899/api/gen",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.source, prompt: $json.imagePrompt, size: parseInt($json.size) }) }}"
+      },
+      "id": "7c05e3bd-4ef3-4e4a-94da-5911cf780251",
+      "name": "提交出图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        300
+      ],
+      "notes": "异步任务，立刻返回 job.id",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7e4e2514-5104-4604-92c6-01d73c42177a",
+              "name": "jobId",
+              "value": "={{ $json.job.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e73d2715-91c4-46da-a852-3f0f1cc3ae62",
+      "name": "记图任务",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "987aee85-00d4-4720-81ae-b4b5f3bf65d0",
+      "name": "等图20秒",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        860,
+        300
+      ],
+      "notes": "8GB 显存大约要 8 分钟，会循环二十多次",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8899/api/job?id={{ $('记图任务').item.json.jobId }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "917d97df-bf51-4ccd-9076-24c7e82e4e09",
+      "name": "查图状态",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "63e22902-731e-4af9-a841-297f2eaab913",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a6006991-4946-403a-8bd3-96099e91d4fc",
+      "name": "图失败?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "23c9d2a4-9ccf-4d5a-8d7a-a829f0737faf",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44f3e681-f2a4-493c-b029-b42da4797f1f",
+      "name": "图完成?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        420
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7c17b9cb-1760-4f2a-9bd2-8fe27d362287",
+      "name": "停-出图失败",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfcc0a43-c3cf-40ff-82f7-8c782b33fba0",
+              "name": "imagePath",
+              "value": "={{ $json.result.path }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b330b6e4-0428-4e5c-aa5a-64be03e04f5f",
+      "name": "出图结果",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1520,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8899/api/vid",
+        "options": {
+          "timeout": 120000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.imagePath, prompt: $('参数').item.json.videoPrompt }) }}"
+      },
+      "id": "e745ee27-9513-4fb1-996a-6925dbac6f80",
+      "name": "提交视频",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1740,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cf6e1c07-670d-44f9-b3d2-8c2f49cf2cb8",
+              "name": "jobId",
+              "value": "={{ $json.job.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e9bbe480-e5d6-491a-a362-8854ae1496b3",
+      "name": "记视频任务",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1960,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "8700228a-1e08-4f42-874d-85d85e613e1a",
+      "name": "等视频60秒",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2180,
+        420
+      ],
+      "notes": "视频更慢，双 14B 模型接力，可能要半小时",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8899/api/job?id={{ $('记视频任务').item.json.jobId }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "7a78c396-3492-4781-9410-3772771cbce9",
+      "name": "查视频状态",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "2f8be3cb-1f31-4a11-a83b-ff150f527990",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "aa7235bc-0425-4970-afd7-cb667233b892",
+      "name": "视频失败?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "35dff287-bc39-4154-8aba-c25b87c01f1c",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bb538f59-f276-4c89-aa89-55e55c8e63b8",
+      "name": "视频完成?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        540
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "99d69483-346d-48a4-a271-5f247ec4fc5e",
+      "name": "停-视频失败",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "704eea88-64f3-45e3-af70-8979cd1873c2",
+              "name": "image",
+              "value": "={{ $('出图结果').item.json.imagePath }}",
+              "type": "string"
+            },
+            {
+              "id": "b79a6e58-b5f2-4a9a-939e-224139425350",
+              "name": "video",
+              "value": "={{ $json.result.path }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bec0eefa-8048-4d5d-beb6-4985ca88ca7d",
+      "name": "完成",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2840,
+        540
+      ]
+    }
+  ],
+  "connections": {
+    "手动开始": {
+      "main": [
+        [
+          {
+            "node": "参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "参数": {
+      "main": [
+        [
+          {
+            "node": "提交出图",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提交出图": {
+      "main": [
+        [
+          {
+            "node": "记图任务",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "记图任务": {
+      "main": [
+        [
+          {
+            "node": "等图20秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "等图20秒": {
+      "main": [
+        [
+          {
+            "node": "查图状态",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查图状态": {
+      "main": [
+        [
+          {
+            "node": "图失败?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "图失败?": {
+      "main": [
+        [
+          {
+            "node": "停-出图失败",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "图完成?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "图完成?": {
+      "main": [
+        [
+          {
+            "node": "出图结果",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "等图20秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "出图结果": {
+      "main": [
+        [
+          {
+            "node": "提交视频",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提交视频": {
+      "main": [
+        [
+          {
+            "node": "记视频任务",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "记视频任务": {
+      "main": [
+        [
+          {
+            "node": "等视频60秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "等视频60秒": {
+      "main": [
+        [
+          {
+            "node": "查视频状态",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查视频状态": {
+      "main": [
+        [
+          {
+            "node": "视频失败?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "视频失败?": {
+      "main": [
+        [
+          {
+            "node": "停-视频失败",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "视频完成?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "视频完成?": {
+      "main": [
+        [
+          {
+            "node": "完成",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "等视频60秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

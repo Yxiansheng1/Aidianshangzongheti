@@ -24,6 +24,106 @@ UPLOAD_DIR = ROOT / "input_uploads"
 OUTPUT_DIR = ROOT / "output"
 
 
+# ------------------------------------------------------------------ 能力契约
+#
+# 这张表是本项目对外的「能力目录」。任何编排工具（n8n / Langflow / 脚本）
+# 照着这张表调 HTTP 就行，不需要知道内部实现。
+#
+# 加一个能力 = 加一条记录 + 加一个路由，不改别的。
+
+CAPABILITIES: list[dict[str, Any]] = [
+    {
+        "name": "analyze.product",
+        "desc": "商品分析 + 生图/视频提示词 + 小红书文案",
+        "method": "POST",
+        "path": "/api/analyze",
+        "inputs": {"name": "str", "url": "str?", "price": "str?", "desc": "str?", "extra": "str?"},
+        "outputs": {"result": "json", "markdown": "str", "note": "str"},
+        "sync": True,
+        "slow": False,
+        "needs_model": True,
+    },
+    {
+        "name": "gen.image",
+        "desc": "商品原图 → 场景主图（本地 ComfyUI）",
+        "method": "POST",
+        "path": "/api/gen",
+        "inputs": {"source": "path", "prompt": "str", "size": "int?", "steps": "int?"},
+        "outputs": {"job": "json"},
+        "sync": False,
+        "slow": True,
+        "needs_model": False,
+    },
+    {
+        "name": "gen.video",
+        "desc": "起始图 → 短视频（本地 Wan2.2）",
+        "method": "POST",
+        "path": "/api/vid",
+        "inputs": {"source": "path", "prompt": "str", "length": "int?"},
+        "outputs": {"job": "json"},
+        "sync": False,
+        "slow": True,
+        "needs_model": False,
+    },
+    {
+        "name": "job.status",
+        "desc": "查询异步任务状态（gen.image / gen.video 用）",
+        "method": "GET",
+        "path": "/api/job?id=<job_id>",
+        "inputs": {"id": "str"},
+        "outputs": {"status": "queued|running|done|error", "result": "json", "error": "str"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
+        "name": "file.get",
+        "desc": "取产物文件（图片/视频），只允许读仓库目录内",
+        "method": "GET",
+        "path": "/file?path=<abs_path>",
+        "inputs": {"path": "path"},
+        "outputs": {"bytes": "binary"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
+        "name": "manifest.scan",
+        "desc": "扫描素材目录，生成上架/发布清单",
+        "method": "POST",
+        "path": "/api/ingest",
+        "inputs": {"dir": "dir"},
+        "outputs": {"count": "int", "products": "json", "manifest": "json"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
+        "name": "package.listing",
+        "desc": "生成上架资料包（主图重命名 + 标题/卖点/详情/属性表）",
+        "method": "POST",
+        "path": "/api/package",
+        "inputs": {"manifest": "json"},
+        "outputs": {"out": "dir", "packages": "json"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
+        "name": "publish.plan",
+        "desc": "生成各平台发布命令（只生成不执行）",
+        "method": "POST",
+        "path": "/api/publish",
+        "inputs": {"manifest": "json", "platforms": "list", "kind": "note|video"},
+        "outputs": {"plans": "json", "dry_run": "bool"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+]
+
+
+
 # ------------------------------------------------------------------ 工具
 
 
@@ -360,6 +460,15 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/status":
                 self._json(_status())
+                return
+
+            if route == "/api/tools":
+                port = self.server.server_address[1]
+                self._json({
+                    "base_url": f"http://127.0.0.1:{port}",
+                    "tools": CAPABILITIES,
+                    "note": "异步能力先提交拿 job.id，再轮询 /api/job?id=... 直到 status=done",
+                })
                 return
 
             if route == "/api/candidates":
