@@ -1,0 +1,169 @@
+{
+  "name": "热点 · 每日选题",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "每天8点",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300],
+      "notes": "每天 08:00 自动跑。想改时间双击这里。",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8899/api/trends?top=10&save=1",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "抓热点",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 300],
+      "notes": "调工作台的 /api/trends，save=1 让它顺便存一份 md。",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a1000000-0000-4000-8000-000000000003",
+              "leftValue": "={{ $json.matched }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "有热点吗",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "notes": "matched > 0 走上面，否则走下面。",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1000000-0000-4000-8000-000000000005",
+              "name": "summary",
+              "value": "=今天有 {{ $json.matched }} 条能蹭，文件在 {{ $json.saved }}",
+              "type": "string"
+            },
+            {
+              "id": "a1000000-0000-4000-8000-000000000006",
+              "name": "top1",
+              "value": "={{ $json.hot[0].title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "挑出来了",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1000000-0000-4000-8000-000000000008",
+              "name": "summary",
+              "value": "=今天没有命中关注词，抓了 {{ $json.total }} 条，过滤负面 {{ $json.blocked }} 条。",
+              "type": "string"
+            },
+            {
+              "id": "a1000000-0000-4000-8000-000000000009",
+              "name": "top1",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000010",
+      "name": "今天没有",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 400]
+    }
+  ],
+  "connections": {
+    "每天8点": {
+      "main": [
+        [
+          {
+            "node": "抓热点",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "抓热点": {
+      "main": [
+        [
+          {
+            "node": "有热点吗",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "有热点吗": {
+      "main": [
+        [
+          {
+            "node": "挑出来了",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "今天没有",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

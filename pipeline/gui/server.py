@@ -33,6 +33,17 @@ OUTPUT_DIR = ROOT / "output"
 
 CAPABILITIES: list[dict[str, Any]] = [
     {
+        "name": "trends.fetch",
+        "desc": "抓百度/微博热搜，按关注词筛相关，自动过滤负面新闻",
+        "method": "GET",
+        "path": "/api/trends?top=10&sources=baidu,weibo&save=1",
+        "inputs": {"top": "int?", "sources": "str?", "save": "bool?"},
+        "outputs": {"total": "int", "matched": "int", "hot": "json", "markdown": "str"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
         "name": "orchestrate.produce",
         "desc": "交给 n8n 全自动跑：出图 → 轮询 → 出视频 → 轮询",
         "method": "POST",
@@ -392,6 +403,24 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
 
 
+def do_trends(params: dict[str, Any]) -> dict[str, Any]:
+    from ..trends import collect, render_markdown, save
+
+    top = int(params.get("top") or 10)
+    raw_sources = params.get("sources")
+    sources = [s.strip() for s in raw_sources.split(",")] if raw_sources else None
+
+    result = collect(sources=sources, top=top)
+    payload = result.as_dict()
+    payload["markdown"] = render_markdown(result)
+
+    if str(params.get("save") or "") in ("1", "true", "yes"):
+        path = save(result, ROOT / "output" / "热点")
+        payload["saved"] = str(path)
+
+    return payload
+
+
 def do_analyze(params: dict[str, Any]) -> dict[str, Any]:
     from ..analyze import ProductBrief, analyze, render_markdown
     from ..fetch import FetchError, fetch
@@ -534,6 +563,11 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/candidates":
                 self._json(_candidates_payload())
+                return
+
+            if route == "/api/trends":
+                params = {k: v[0] for k, v in query.items() if v}
+                self._json(do_trends(params))
                 return
 
             if route == "/api/job":

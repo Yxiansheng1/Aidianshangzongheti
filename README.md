@@ -33,6 +33,8 @@
 ## 拼装关系
 
 ```
+⓪ 热点   trends   每天抓一次热搜，筛出能蹭的（免费，自动过滤负面）
+        ↓
 ① 分析   analyze  商品 → 分析 + 生图/视频提示词 + 小红书文案（需文本模型）
         ↓
 ② 选品   pick     候选池打分排序（数据你录入，模块只做判断）
@@ -80,6 +82,10 @@ python -m pipeline check
 ```powershell
 # 0. 启动 ComfyUI（8GB 显存用这个）
 D:\AI\ComfyUI_windows_portable\Start_Wan_8GB.bat
+
+# 0. 热点：今天有什么能蹭的
+python -m pipeline trends
+python -m pipeline trends --top 5 --save
 
 # 1. 分析：商品 → 卖点/风险/定价 + 生图与视频提示词（需文本模型 key）
 python -m pipeline analyze --name "渐变杯装蜡烛" `

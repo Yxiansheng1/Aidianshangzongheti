@@ -286,6 +286,21 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_trends(args: argparse.Namespace) -> int:
+    from .trends import collect, render_markdown, save
+
+    sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
+    result = collect(sources=sources, top=args.top)
+
+    text = render_markdown(result)
+    print(text)
+
+    if args.save:
+        path = save(result, Path("output") / "热点")
+        print(f"已保存：{path.resolve()}")
+    return 0
+
+
 def _cmd_package(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     manifest_path = Path(args.manifest)
@@ -447,6 +462,13 @@ def main(argv: list[str] | None = None) -> int:
     p_an.add_argument("--out", help="输出 md 路径")
     p_an.add_argument("--dry-run", action="store_true", help="只打印提示词，不调模型")
     p_an.set_defaults(func=_cmd_analyze)
+
+    p_tr = sub.add_parser("trends", help="抓今日热点（百度/微博热搜），按关注词筛相关")
+    _add_config(p_tr)
+    p_tr.add_argument("--top", type=int, default=10, help="最多显示几条，默认 10")
+    p_tr.add_argument("--sources", help="来源，逗号分隔：baidu,weibo。默认全抓")
+    p_tr.add_argument("--save", action="store_true", help="同时保存到 output/热点/日期.md")
+    p_tr.set_defaults(func=_cmd_trends)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)
