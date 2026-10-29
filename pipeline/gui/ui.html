@@ -483,6 +483,20 @@
     }, 3000);
   }
 
+  function nextStep(it){
+    if(it.status === "pending") return "下一步：点「写+审」，AI 出稿并审核";
+    if(it.status === "written") return "下一步：点「写+审」重新审核";
+    if(it.status === "needs_fix") return "审核没过，看看问题再改（或换角度重写）";
+    if(it.status === "approved"){
+      if(!it.source) return "下一步：点「上传原图」，一张自己拍的商品照片";
+      if(!it.images || !it.images.length) return "下一步：点「AI 出图」（约 7 分钟）";
+      return "下一步：点「直接发布」，或点「看命令」先核对参数";
+    }
+    if(it.status === "published") return "已发布";
+    if(it.status === "rejected") return "已退回，可以删掉或重新加一条";
+    return "";
+  }
+
   function renderQueue(){
     if(!qData) return;
     var st = qData.stats || {};
@@ -538,7 +552,7 @@
         '<td class="num">' + esc(it.id) + '</td>' +
         '<td><span class="grade ' + badge + '">' + esc(it.status_label || it.status) + '</span></td>' +
         '<td>' + esc(it.platform) + '</td>' +
-        '<td>' + title + '</td>' +
+        '<td>' + title + '<div class="muted" style="margin-top:4px;font-size:11.5px">' + esc(nextStep(it)) + '</div></td>' +
         '<td class="row" style="gap:6px">' + ops.join("") + '</td>' +
         '</tr>';
       if(it.title && it.body){

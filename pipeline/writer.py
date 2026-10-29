@@ -43,10 +43,22 @@ PLATFORMS: dict[str, PlatformStyle] = {
     "xiaohongshu": PlatformStyle(
         key="xiaohongshu", name="小红书", title_max=20, tag_max=8,
         guide=(
-            "小红书图文。第一人称，像跟朋友说话，口语化，短句，分段。"
-            "不要用 emoji 堆砌，最多 2 个。开头两句就要给出具体场景或痛点。"
-            "正文 150-300 字。结尾可以带一句自然的提问，但不要写「评论区告诉我」。"
-            "标题不超过 20 字，要具体，不要「绝了」「谁懂啊」这种空话。"
+            "小红书图文。必须按这四段写：\n"
+            "① 钩子（1-2 句）：一个具体的、有画面的场景，或一个反常识的判断。"
+            "不要「最近」「大家好」这种开场。\n"
+            "② 主体（2-3 段）：具体发生了什么 + 你的真实动作。"
+            "必须带可验证的细节：时间、数字、具体牌子、具体感受。"
+            "写不出细节就别写。\n"
+            "③ 转折或边界（1 段）：什么情况下不适合 / 有什么代价 / 你也没解决的部分。"
+            "这一段决定可信度，不能省。\n"
+            "④ 收尾（1 句）：一个具体的、对方能真的回答的问题。"
+            "不要「你会怎么选」「评论区聊聊」这种假互动。\n\n"
+            "硬性禁止：\n"
+            "- 不写「如何核实信息」「信息素养」「保持理性」这类方法论空话\n"
+            "- 不写「我先去对了两件事」「以原文为准」这类新闻编辑腔\n"
+            "- 不写自己没有真实经历的事，宁可写得很小很具体\n"
+            "- 不用「绝了」「谁懂啊」「家人们」\n"
+            "标题不超过 20 字，要具体，不要悬念式标题党。"
         ),
     ),
     "zhihu": PlatformStyle(
@@ -109,6 +121,12 @@ def build_prompt(topic: str, platform: str, *, product: str = "", extra: str = "
         "- 不编造销量、评价、检测报告、用户反馈",
         "- 不用「家人们」「绝了」「谁懂啊」这种空洞流行语",
         "",
+        "**最重要的一条：**",
+        "如果你发现这个主题跟给到的商品/经历之间没有可写的具体关联，"
+        "**不要硬凑**。直接返回 title 和 body 都为空字符串，"
+        "在 notes 里写清缺什么（例如：这个主题跟商品无关，需要一个具体的使用场景）。",
+        "宁可交白卷，也不要写一篇谁都不想看的空话。",
+        "",
         "按这个 JSON 输出：",
         SCHEMA,
     ]
@@ -164,6 +182,15 @@ def write(
 
     title = str(data.get("title") or "").strip()
     body = str(data.get("body") or "").strip()
+    notes = str(data.get("notes") or "").strip()
+
+    if not title or not body:
+        raise ModelError(
+            "模型判断这个主题写不出东西，拒绝硬凑。\n"
+            f"它给的理由：{notes or '（没说明）'}\n\n"
+            "换一个角度：给一个具体的经历、场景或商品细节，再试。"
+        )
+
     tags = [str(t).strip().lstrip("#") for t in (data.get("tags") or []) if str(t).strip()]
 
     warnings: list[str] = []
@@ -181,7 +208,7 @@ def write(
         "title": title,
         "body": body,
         "tags": tags,
-        "notes": str(data.get("notes") or ""),
+        "notes": notes,
         "warnings": warnings,
         "length": len(body),
     }
