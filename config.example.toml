@@ -67,7 +67,16 @@ xiaohongshu = "main"
 douyin = "main"
 zhihu = "main"
 
-[orchestrate]# n8n 的 webhook 地址。工作台点「交给 n8n 全自动」时往这里 POST。
+[orchestrate]
+# n8n 的 webhook 地址。工作台点「交给 n8n 全自动」时往这里 POST。
 # 注意：改过工作流之后，必须在 n8n 里把工作流「停用→再启用」一次，
 # 否则 webhook 不会重新注册，会返回 404。
 webhook_url = "http://127.0.0.1:5678/webhook/ecom-gen-video"
+
+[trends]
+# 国外源走这个代理；国内源代码里强制直连。
+proxy = "http://127.0.0.1:7897"
+# 关注词。留空就用 pipeline/trends.py 里的默认表。
+# 中文按子串匹配，英文按词边界匹配。
+keywords = []
+
