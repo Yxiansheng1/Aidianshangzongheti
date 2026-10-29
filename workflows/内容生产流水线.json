@@ -1,0 +1,567 @@
+{
+  "name": "内容生产流水线（全画布可见）",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a531af05-dd05-4c46-98c1-e89ed87e6044",
+      "name": "手动开始",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        320
+      ],
+      "notes": "点上面的 Execute workflow 开始",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c28b2ef1-0c20-4e64-a98d-9a72d7858cad",
+              "name": "topic",
+              "value": "香氛 年轻人的情绪搭子",
+              "type": "string"
+            },
+            {
+              "id": "05d2cff6-ae5a-411f-8e5f-84f2ac9df5ed",
+              "name": "platform",
+              "value": "xiaohongshu",
+              "type": "string"
+            },
+            {
+              "id": "af1b2eb4-debe-44fe-94dc-3a39f6e4a7a0",
+              "name": "product",
+              "value": "渐变杯装香薰蜡烛，大豆蜡，燃烧约25小时",
+              "type": "string"
+            },
+            {
+              "id": "82410b81-81d7-4e33-ab51-6d9b6e5b8408",
+              "name": "sourceImage",
+              "value": "D:/AIdianshangzongheti/input_uploads/1793178507-0621.jpg_wh860.jpg",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6c5dbada-9df7-41c6-9caf-57e49d146f78",
+      "name": "参数",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        200,
+        320
+      ],
+      "notes": "跑之前改这里：主题、平台、商品、出图用的原图",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "369f706f-e792-4eb5-b34c-76ae2cf55e41",
+              "name": "system",
+              "value": "你是中文内容编辑，写给真实的人看。只说事实和真实感受，不编造数据、不写绝对化用语、不用夸张营销腔。输出必须是合法 JSON：{\"title\":\"\",\"body\":\"\",\"tags\":[]}，不要代码围栏。",
+              "type": "string"
+            },
+            {
+              "id": "1841c804-4178-45b7-8551-2e0f246eadc2",
+              "name": "user",
+              "value": "=平台：{{ $('参数').first().json.platform }}\n主题：{{ $('参数').first().json.topic }}\n商品：{{ $('参数').first().json.product }}\n\n写作要求：\n- 小红书：第一人称、口语、短句分段，150-300 字，标题≤20字，标签≤8个\n- 知乎：理性、分小标题，400-800 字，标题≤60字\n- 百家号：资讯体、客观、利搜索，500-800 字，标题≤30字\n- 抖音：口播稿，前3秒抓人，一句一行，150-200 字\n\n禁写：最/第一/100%/治愈/根治/加微信/点击链接。",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5802080d-da39-438d-9d30-467ea730e5e1",
+      "name": "拼写稿提示词",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        420,
+        320
+      ],
+      "notes": "提示词就在这个节点里，双击可改。改完直接跑。",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.tokenav.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-v4-pro', messages: [ { role: 'system', content: $json.system }, { role: 'user', content: $json.user } ], temperature: 0.6, max_tokens: 4000 }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "0da9d4a1-0ac6-4b0f-8559-6bd184682ac3",
+      "name": "写稿",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        320
+      ],
+      "notes": "调 tokenav 的 deepseek-v4-pro",
+      "notesInFlow": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KR6jN1SBltiLYYST",
+          "name": "tokenav Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst content = raw.choices?.[0]?.message?.content ?? '';\nlet data;\ntry {\n  const m = content.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  data = JSON.parse(m ? m[1] : content);\n} catch (e) {\n  throw new Error('写稿节点返回的不是 JSON：' + content.slice(0, 300));\n}\nreturn [{ json: {\n  title: data.title || '',\n  body: data.body || '',\n  tags: (data.tags || []).join(','),\n  platform: $('参数').first().json.platform\n} }];"
+      },
+      "id": "8bfe361d-8258-4548-9890-879a7ab72786",
+      "name": "解析稿件",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        320
+      ],
+      "notes": "从 choices[0].message.content 里抠 JSON，抠不出来就报错停下",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5f00faa9-365e-4fee-b739-25fbeb7adf83",
+              "name": "system",
+              "value": "你是内容合规审核员。只判断不改写。输出合法 JSON，不要代码围栏。",
+              "type": "string"
+            },
+            {
+              "id": "b858b1c8-4224-4922-b103-0d6dd9f41707",
+              "name": "user",
+              "value": "=审核这段要发到 {{ $('参数').first().json.platform }} 的文案。\n\n先把它拆成可核查的事实性表述（数字、材质、效果承诺、对比结论、销量评价）。\n**不要拆**主观感受、修辞、场景描写、提问。\n\n然后逐条判断：属实 / 存疑 / 无法证实 / 夸大 / 主观\n- 无法证实：涉及具体数据但没来源\n- 夸大：把普通商品说成功效产品\n- 主观：个人感受，不算问题\n\n文案：\n\"\"\"\n{{ $json.title }}\n\n{{ $json.body }}\n\"\"\"\n\n输出 JSON：\n{\"passed\": true/false, \"score\": 0-100, \"issues\": [{\"level\":\"block 或 warn\",\"claim\":\"\",\"advice\":\"\"}], \"summary\":\"\"}\n\n有任意 block 就是 passed=false。",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5655a12e-6889-4946-bbbc-3585b426074c",
+      "name": "拼审核提示词",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1080,
+        320
+      ],
+      "notes": "审核标准也写在节点里，可以自己调松紧",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.tokenav.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-v4-pro', messages: [ { role: 'system', content: $json.system }, { role: 'user', content: $json.user } ], temperature: 0.6, max_tokens: 4000 }) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "49117452-717a-4ad9-994d-9db45e05d37a",
+      "name": "审核",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        320
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "KR6jN1SBltiLYYST",
+          "name": "tokenav Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst content = raw.choices?.[0]?.message?.content ?? '';\nlet data;\ntry {\n  const m = content.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  data = JSON.parse(m ? m[1] : content);\n} catch (e) {\n  data = { passed: false, score: 0, issues: [{ level: 'block', claim: '', advice: '审核返回格式异常，人工看一看' }], summary: '解析失败' };\n}\nconst issues = data.issues || [];\nconst blocks = issues.filter(i => i.level === 'block');\nreturn [{ json: {\n  passed: blocks.length === 0 && data.passed !== false,\n  score: data.score ?? 0,\n  summary: data.summary || '',\n  blocks: blocks.length,\n  issuesText: issues.map(i => `[${i.level}] ${i.claim || ''} -> ${i.advice || ''}`).join('\\n'),\n  title: $('解析稿件').first().json.title,\n  body: $('解析稿件').first().json.body,\n  sourceImage: $('参数').first().json.sourceImage\n} }];"
+      },
+      "id": "b7faf92b-6faf-41e8-b471-039bb8735149",
+      "name": "解析审核",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        320
+      ],
+      "notes": "只要有一处 block 就判不通过",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "7520b57b-dc06-4d88-adf6-63ec1251d841",
+              "leftValue": "={{ $json.passed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d248915e-d4cf-448d-809b-5023c94d867d",
+      "name": "有必改项?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        320
+      ],
+      "notes": "passed=true 走上面（继续出图），false 走下面（退回改）",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aba5b190-330b-42ef-ad01-4b37e07487cf",
+              "name": "verdict",
+              "value": "=不通过（{{ $json.score }} 分）：{{ $json.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "8bd6b973-c021-44fc-81ba-b14f76749f78",
+              "name": "problems",
+              "value": "={{ $json.issuesText }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "463d3bd8-4f74-4693-bac5-0abda275abbf",
+      "name": "退回待改",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1960,
+        480
+      ],
+      "notes": "这一步停住。改完文案重新跑。",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8899/api/gen",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.sourceImage, prompt: '把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，商品保持原样不变形', size: 1024 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "354d37d9-6552-4b55-b82f-0834ed2570e1",
+      "name": "提交出图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1960,
+        220
+      ],
+      "notes": "调本地工作台的 ComfyUI 出图，立刻返回 job.id",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "93c933ba-e8ac-4e7c-b7aa-520e39c597f5",
+      "name": "等20秒",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2180,
+        220
+      ],
+      "notes": "8GB 显存一张约 7 分钟，会循环二十多次",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8899/api/job?id={{ $('提交出图').first().json.job.id }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "47c15bc3-8080-416f-bb9c-302751493cf7",
+      "name": "查图状态",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "73737d58-ba58-46ef-ae0f-82f3caf3970a",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "463c6515-1f0d-4568-a616-7f52539bb2f1",
+      "name": "图完成?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        220
+      ],
+      "notes": "没好就回到等20秒，好了往下走",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9f2bf727-44dc-4d45-97e6-b56b0033eaba",
+              "name": "verdict",
+              "value": "=通过（{{ $('解析审核').first().json.score }} 分）",
+              "type": "string"
+            },
+            {
+              "id": "11f71b35-b735-43c8-b66a-431a6f64dfa2",
+              "name": "image",
+              "value": "={{ $json.result.path }}",
+              "type": "string"
+            },
+            {
+              "id": "a30357be-0cd3-4689-a7d0-fc5778d74206",
+              "name": "title",
+              "value": "={{ $('解析审核').first().json.title }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d2202bf9-718d-42e7-b280-2c34c94aaf08",
+      "name": "完成",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2840,
+        220
+      ],
+      "notes": "拿到图了。下一步可以接发布。",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "手动开始": {
+      "main": [
+        [
+          {
+            "node": "参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "参数": {
+      "main": [
+        [
+          {
+            "node": "拼写稿提示词",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "拼写稿提示词": {
+      "main": [
+        [
+          {
+            "node": "写稿",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写稿": {
+      "main": [
+        [
+          {
+            "node": "解析稿件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析稿件": {
+      "main": [
+        [
+          {
+            "node": "拼审核提示词",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "拼审核提示词": {
+      "main": [
+        [
+          {
+            "node": "审核",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "审核": {
+      "main": [
+        [
+          {
+            "node": "解析审核",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析审核": {
+      "main": [
+        [
+          {
+            "node": "有必改项?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "有必改项?": {
+      "main": [
+        [
+          {
+            "node": "提交出图",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "退回待改",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "提交出图": {
+      "main": [
+        [
+          {
+            "node": "等20秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "等20秒": {
+      "main": [
+        [
+          {
+            "node": "查图状态",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查图状态": {
+      "main": [
+        [
+          {
+            "node": "图完成?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "图完成?": {
+      "main": [
+        [
+          {
+            "node": "完成",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "等20秒",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
