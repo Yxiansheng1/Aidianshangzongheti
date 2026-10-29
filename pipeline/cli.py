@@ -379,6 +379,75 @@ def _cmd_review(args: argparse.Namespace) -> int:
     return 0 if result.passed else 1
 
 
+def _cmd_content(args: argparse.Namespace) -> int:
+    from .content import pipeline as content_pipeline
+    from .content.rewrite import load_skill, list_skills, render_markdown
+
+    cfg = load_config(args.config)
+
+    if args.skills:
+        print("可用 skill：" + "、".join(list_skills()))
+        return 0
+
+    if not args.url and not args.file:
+        print("给一个 --url，或者 --file 传一个本地文本文件")
+        return 2
+
+    article = None
+    if args.file:
+        path = Path(args.file)
+        if not path.is_file():
+            print(f"找不到文件：{path}")
+            return 2
+        article = {
+            "title": args.topic or path.stem,
+            "text": path.read_text(encoding="utf-8"),
+        }
+
+    try:
+        load_skill(args.platform)
+    except FileNotFoundError as exc:
+        print(exc)
+        return 2
+
+    print(f"开始跑：{args.url or args.file}  →  {args.platform}\n")
+    result = content_pipeline.run(
+        args.url or "",
+        cfg,
+        platform=args.platform,
+        images=args.images,
+        draw=not args.no_draw,
+        article=article,
+    )
+
+    for name, step in result["steps"].items():
+        ok = step.get("ok")
+        mark = "OK " if ok else "ERR"
+        detail = ""
+        if name == "fetch":
+            detail = f'{step.get("chars", 0)} 字' if ok else step.get("reason", "")
+        elif name == "rewrite":
+            detail = f'{step.get("length", 0)} 字' if ok else step.get("reason", "")
+        elif name == "review":
+            if ok:
+                detail = f'{"通过" if step.get("passed") else "不通过"} {step.get("score")} 分　{len(step.get("issues") or [])} 个问题'
+            else:
+                detail = step.get("reason", "")
+        elif name == "visual":
+            detail = f'{step.get("count", 0)} 张' if ok else step.get("reason", "")
+            if step.get("skipped"):
+                detail = "已跳过"
+        print(f"  [{mark}] {name:<8} {detail}")
+
+    print()
+    if "draft" in result:
+        print(render_markdown(result["draft"]))
+    if result.get("dir"):
+        print(f"\n产物目录：{result['dir']}")
+
+    return 0 if result.get("ok") else 1
+
+
 def _cmd_package(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     manifest_path = Path(args.manifest)
@@ -567,6 +636,17 @@ def main(argv: list[str] | None = None) -> int:
     p_rv.add_argument("--platform", default="xiaohongshu", help="目标平台")
     p_rv.add_argument("--no-ai", action="store_true", help="只用规则层，不调模型（快且免费）")
     p_rv.set_defaults(func=_cmd_review)
+
+    p_ct = sub.add_parser("content", help="内容流水线（项目B）：抓文章 → 改写 → 审核 → 配图")
+    _add_config(p_ct)
+    p_ct.add_argument("--url", help="文章链接")
+    p_ct.add_argument("--file", help="本地文本文件（代替 --url）")
+    p_ct.add_argument("--topic", help="主题，默认用文章标题")
+    p_ct.add_argument("--platform", default="小红书", help="用哪个 skill，默认 小红书")
+    p_ct.add_argument("--images", type=int, default=2, help="生成几张配图，默认 2")
+    p_ct.add_argument("--no-draw", action="store_true", help="只写文案，不出图")
+    p_ct.add_argument("--skills", action="store_true", help="列出可用的 skill")
+    p_ct.set_defaults(func=_cmd_content)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)
