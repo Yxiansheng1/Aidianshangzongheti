@@ -260,7 +260,11 @@ SOURCE_BLOCK = """原文（改写依据，逐条比对）：
 {source}
 \"\"\"
 
-**判断时先在这里面找。找到了就判「属实」，不要因为"看起来像具体数据"就判无法证实。**
+**判断时先在这里面找：**
+- 找到了就直接判「属实」，不要因为"看起来像具体数据"就判无法证实
+- 但**数字对得上 ≠ 表述正确**。要看语义。例如原文写 95% off（只付 5%），
+  改写成「打 95 折」（只便宜 5%），数字都含 95，意思却反了 —— 这种要判「存疑」并指出
+- 原文没有的，才判「无法证实」
 """
 
 
@@ -298,7 +302,8 @@ def check_claims(claims: list[str], platform: str, cfg: Any, *, source_text: str
     listed = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, 1))
 
     if source_text.strip():
-        source_block = SOURCE_BLOCK.format(source=source_text[:4000])
+        # 给足原文。实测截断到 4000 字会把尾部定价那段切掉，导致误判
+        source_block = SOURCE_BLOCK.format(source=source_text[:12000])
     else:
         source_block = "（没有提供原文，只能凭常识判断。具体数字要格外严格。）"
 

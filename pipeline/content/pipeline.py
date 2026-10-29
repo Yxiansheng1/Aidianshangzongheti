@@ -47,6 +47,7 @@ def run(
         title = str(article.get("title") or "")
         text = str(article.get("text") or "")
         result["steps"]["fetch"] = {"ok": True, "chars": len(text), "from": "input"}
+        result["source_text"] = text[:20000]
     else:
         page = fetch(url, proxy=cfg.trends.proxy or None)
         if not page.ok:
@@ -56,6 +57,7 @@ def run(
         title = page.title or url
         text = page.text
         result["steps"]["fetch"] = {"ok": True, "chars": page.chars, "title": page.title}
+        result["source_text"] = text[:20000]
 
     if len(text) < 200:
         result["steps"]["fetch"]["note"] = "正文太短，改写时容易编"
