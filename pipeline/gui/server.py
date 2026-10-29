@@ -609,6 +609,89 @@ def do_queue_cmd(params: dict[str, Any]) -> dict[str, Any]:
     return {"command": plan.command, "warnings": plan.warnings, "platform": item.platform}
 
 
+def do_content_meta() -> dict[str, Any]:
+    from ..content.rewrite import list_skills
+
+    return {"skills": list_skills(), "default": "小红书"}
+
+
+def start_content(params: dict[str, Any]) -> dict[str, Any]:
+    """内容流水线：抓文章 → 改写 → 审核 → 配图。慢，走后台任务。"""
+    from ..content import pipeline as content_pipeline
+    from .jobs import REGISTRY
+
+    cfg = load_config()
+
+    url = str(params.get("url") or "").strip()
+    raw_text = str(params.get("text") or "").strip()
+    platform = str(params.get("platform") or "小红书")
+    images = int(params.get("images") or 2)
+
+    if not url and not raw_text:
+        raise ValueError("给一个文章链接，或者直接粘贴正文")
+
+    article = None
+    if raw_text:
+        article = {
+            "title": str(params.get("title") or "未命名"),
+            "text": raw_text,
+        }
+
+    def work(job):
+        job.message = "抓原文中…"
+        result = content_pipeline.run(
+            url, cfg, platform=platform, images=images,
+            draw=bool(params.get("draw", True)), article=article,
+        )
+
+        if not result.get("ok"):
+            step = result.get("steps", {})
+            reason = ""
+            for name in ("fetch", "rewrite"):
+                if step.get(name) and not step[name].get("ok"):
+                    reason = step[name].get("reason", "")
+                    break
+            raise RuntimeError(reason or "流水线失败")
+
+        draft = result["draft"]
+        visual = result.get("steps", {}).get("visual", {})
+        files = visual.get("files") or []
+
+        return {
+            "draft": draft,
+            "images": [
+                {"path": f, "url": "/file?path=" + urllib.parse.quote(f)}
+                for f in files
+            ],
+            "review": result.get("steps", {}).get("review", {}),
+            "chars": result.get("steps", {}).get("fetch", {}).get("chars", 0),
+            "dir": result.get("dir", ""),
+        }
+
+    return {"job": REGISTRY.submit("content", work).to_dict()}
+
+
+def do_content_skill(params: dict[str, Any]) -> dict[str, Any]:
+    """读 / 写 skill 文件，让用户可以在界面里改。"""
+    from ..content.rewrite import SKILL_DIR, list_skills, load_skill
+
+    name = str(params.get("platform") or "小红书")
+    action = str(params.get("action") or "read")
+
+    if action == "read":
+        return {"platform": name, "content": load_skill(name), "skills": list_skills()}
+
+    if action == "write":
+        content = str(params.get("content") or "")
+        if len(content) < 200:
+            raise ValueError("内容太短了，确认是要覆盖整份 skill 吗？")
+        target = SKILL_DIR / f"{name}.md"
+        target.write_text(content, encoding="utf-8")
+        return {"platform": name, "saved": True, "chars": len(content)}
+
+    raise ValueError(f"未知操作：{action}")
+
+
 def do_queue_list() -> dict[str, Any]:
     from .. import queue
 
@@ -945,6 +1028,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(do_trends_meta())
                 return
 
+            if route == "/api/content/meta":
+                self._json(do_content_meta())
+                return
+
             if route == "/api/trends":
                 params = {k: _fix_mojibake(v[0]) for k, v in query.items() if v}
                 self._json(do_trends(params))
@@ -1074,6 +1161,14 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/queue/refetch":
                 self._json(do_queue_refetch(payload))
+                return
+
+            if route == "/api/content/run":
+                self._json(start_content(payload))
+                return
+
+            if route == "/api/content/skill":
+                self._json(do_content_skill(payload))
                 return
 
             self._json({"error": "not found"}, 404)
