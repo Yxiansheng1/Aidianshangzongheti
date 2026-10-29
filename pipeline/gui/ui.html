@@ -563,7 +563,9 @@
         '</tr>';
       if(it.title && it.body){
         html += '<tr><td></td><td colspan="4" style="background:#faf9f6;font-size:12.5px;color:#55534e;white-space:pre-wrap">' +
-          esc(it.body.slice(0, 260)) + (it.body.length > 260 ? '…' : '') + '</td></tr>';
+          '<div class="qbody" style="max-height:150px;overflow:hidden">' + esc(it.body) + '</div>' +
+          '<button class="btn small" data-act="toggle" data-id="' + esc(it.id) + '" style="margin-top:6px">展开全文</button>' +
+          '</td></tr>';
       }
     });
     html += '</tbody></table>';
@@ -633,6 +635,16 @@
         if(d.error) throw new Error(d.error);
         alert("这条会在终端里跑：\n\n" + d.command);
       }).catch(function(e){ $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+      return;
+    }
+    if(act === "toggle"){
+      var row = document.querySelector('#q-list button[data-act="toggle"][data-id="' + id + '"]');
+      if(!row) return;
+      var box = row.parentNode.querySelector(".qbody");
+      if(!box) return;
+      var open = box.style.maxHeight === "none";
+      box.style.maxHeight = open ? "150px" : "none";
+      row.textContent = open ? "展开全文" : "收起";
       return;
     }
     if(act === "refetch"){
