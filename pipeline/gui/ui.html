@@ -75,7 +75,7 @@
     font-size:12px;border-bottom:1px solid var(--line);white-space:nowrap}
   td{padding:8px 10px;border-bottom:1px solid #f4f2ed;font-variant-numeric:tabular-nums}
   tr:last-child td{border-bottom:none}
-  td.num,th.num{text-align:right}
+  td.num,th.num{text-align:right;white-space:nowrap}
   .grade{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
   .g-主推{background:var(--accent-soft);color:var(--accent)}
   .g-备选{background:#eef3ea;color:#4c6b3c}
@@ -121,6 +121,7 @@
 
   <nav>
     <button data-tab="trend">热点</button>
+    <button data-tab="queue">内容</button>
     <button data-tab="gen" class="active">出图</button>
     <button data-tab="vid">视频</button>
     <button data-tab="analyze">分析</button>
@@ -157,6 +158,39 @@
         <button class="btn small" id="tr-save">存成 md</button>
       </div>
       <div id="tr-result"><div class="empty">勾几个分类，点抓取</div></div>
+    </div>
+  </section>
+
+  <!-- ================= 内容队列 ================= -->
+  <section class="panel" id="panel-queue">
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <b style="font-size:14px">加一条</b>
+        <span class="muted">写个主题就行，AI 负责写和审</span>
+      </div>
+      <div class="row" style="gap:10px;margin-bottom:12px">
+        <input type="text" id="q-topic" placeholder="主题 / 热点标题，例如：香氛 年轻人的情绪搭子" style="flex:2;min-width:220px">
+        <select id="q-platform" style="width:130px">
+          <option value="xiaohongshu">小红书</option>
+          <option value="zhihu">知乎</option>
+          <option value="baijiahao">百家号</option>
+          <option value="dayu">大鱼号</option>
+          <option value="douyin">抖音口播</option>
+        </select>
+        <input type="text" id="q-product" placeholder="商品（可选）" style="flex:1;min-width:140px">
+        <button class="btn primary" id="q-add">加入队列</button>
+      </div>
+      <div id="q-stats" class="row" style="gap:8px;margin-bottom:12px"></div>
+      <div class="row">
+        <button class="btn" id="q-run">对待写的批量跑「写+审」</button>
+        <span class="muted" id="q-hint"></span>
+      </div>
+      <div class="status-line" id="q-status"></div>
+      <div id="q-error"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div id="q-list"><div class="empty">队列还是空的，上面加一条</div></div>
     </div>
   </section>
 
@@ -370,6 +404,7 @@
       $("panel-" + btn.dataset.tab).classList.add("active");
       if(btn.dataset.tab === "pick") loadCandidates();
       if(btn.dataset.tab === "trend" && !trMeta) loadTrendMeta();
+      if(btn.dataset.tab === "queue") loadQueue();
     });
   });
 
@@ -400,6 +435,140 @@
       onDone(res);
     }).catch(function(e){ alert("上传失败：" + e); });
   }
+
+  /* ---------------- 内容队列 ---------------- */
+  var qData = null;
+
+  function loadQueue(){
+    fetch("/api/queue").then(function(r){ return r.json(); }).then(function(d){
+      qData = d;
+      renderQueue();
+    }).catch(function(e){
+      $("q-list").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+    });
+  }
+
+  function renderQueue(){
+    if(!qData) return;
+    var st = qData.stats || {};
+    var order = ["pending","written","needs_fix","approved","published","rejected"];
+    var labels = qData.statuses || {};
+    $("q-stats").innerHTML = order.map(function(k){
+      var n = st[k] || 0;
+      return '<span class="catchip' + (n ? ' on' : '') + '" style="cursor:default">' +
+             esc(labels[k] || k) + ' <small>' + n + '</small></span>';
+    }).join("");
+
+    var items = qData.items || [];
+    $("q-hint").textContent = st.pending ? ("有 " + st.pending + " 条待写") : "";
+
+    if(!items.length){
+      $("q-list").innerHTML = '<div class="empty">队列还是空的，上面加一条</div>';
+      return;
+    }
+
+    var html = '<table><thead><tr><th>ID</th><th>状态</th><th>平台</th><th>标题</th><th>操作</th></tr></thead><tbody>';
+    items.forEach(function(it){
+      var badge = {
+        pending:"g-观察", written:"g-备选", needs_fix:"g-淘汰",
+        approved:"g-主推", published:"g-主推", rejected:"g-淘汰"
+      }[it.status] || "";
+      var ops = [];
+      if(it.status === "pending" || it.status === "needs_fix" || it.status === "written"){
+        ops.push('<button class="btn small" data-act="step" data-id="' + esc(it.id) + '">写+审</button>');
+      }
+      if(it.status === "approved"){
+        ops.push('<button class="btn small" data-act="publish" data-id="' + esc(it.id) + '">标记已发</button>');
+        ops.push('<button class="btn small" data-act="reject" data-id="' + esc(it.id) + '">退回</button>');
+      }
+      if(it.status === "needs_fix"){
+        ops.push('<button class="btn small" data-act="reject" data-id="' + esc(it.id) + '">退回</button>');
+      }
+      ops.push('<button class="btn small" data-act="del" data-id="' + esc(it.id) + '">删</button>');
+
+      var title = esc(it.title || it.topic);
+      if(it.status === "needs_fix" && it.review && it.review.issues && it.review.issues.length){
+        title += ' <span class="muted">· ' + it.review.issues.length + ' 处待改</span>';
+      }
+      html += '<tr>' +
+        '<td class="num">' + esc(it.id) + '</td>' +
+        '<td><span class="grade ' + badge + '">' + esc(it.status_label || it.status) + '</span></td>' +
+        '<td>' + esc(it.platform) + '</td>' +
+        '<td>' + title + '</td>' +
+        '<td class="row" style="gap:6px">' + ops.join("") + '</td>' +
+        '</tr>';
+      if(it.title && it.body){
+        html += '<tr><td></td><td colspan="4" style="background:#faf9f6;font-size:12.5px;color:#55534e;white-space:pre-wrap">' +
+          esc(it.body.slice(0, 260)) + (it.body.length > 260 ? '…' : '') + '</td></tr>';
+      }
+    });
+    html += '</tbody></table>';
+    $("q-list").innerHTML = html;
+
+    Array.prototype.forEach.call($("q-list").querySelectorAll("button[data-act]"), function(btn){
+      btn.addEventListener("click", function(){ qAction(btn.dataset.act, btn.dataset.id); });
+    });
+  }
+
+  function qAction(act, id){
+    $("q-error").innerHTML = "";
+    if(act === "del"){
+      if(!confirm("删除 " + id + "？")) return;
+      fetch("/api/queue/remove", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id})})
+        .then(function(r){ return r.json(); }).then(loadQueue);
+      return;
+    }
+    if(act === "step"){
+      setStatus("q-status", true, "正在写和审 " + id + "…");
+      fetch("/api/queue/step", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id})})
+        .then(function(r){ return r.json(); }).then(function(d){
+          setStatus("q-status", false, "");
+          if(d.error) throw new Error(d.error);
+          if(d.failed && d.failed.length) $("q-error").innerHTML = '<div class="err">' + esc(d.failed[0].error) + '</div>';
+          loadQueue();
+        }).catch(function(e){
+          setStatus("q-status", false, "");
+          $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+        });
+      return;
+    }
+    var status = act === "publish" ? "published" : "rejected";
+    fetch("/api/queue/set", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id, status:status})})
+      .then(function(r){ return r.json(); }).then(loadQueue);
+  }
+
+  $("q-add").addEventListener("click", function(){
+    var topic = $("q-topic").value.trim();
+    if(!topic){ alert("写个主题"); return; }
+    fetch("/api/queue/add", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        topic: topic,
+        platform: $("q-platform").value,
+        product: $("q-product").value.trim()
+      })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d.error) throw new Error(d.error);
+      $("q-topic").value = ""; $("q-product").value = "";
+      loadQueue();
+    }).catch(function(e){ $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+  });
+
+  $("q-run").addEventListener("click", function(){
+    if(!qData || !(qData.stats.pending || 0)){
+      alert("没有待写的条目"); return;
+    }
+    setStatus("q-status", true, "正在批量跑，每条约 20-40 秒…");
+    fetch("/api/queue/step", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({})})
+      .then(function(r){ return r.json(); }).then(function(d){
+        setStatus("q-status", false, "完成 " + (d.done||[]).length + " 条，失败 " + (d.failed||[]).length + " 条");
+        if(d.failed && d.failed.length) $("q-error").innerHTML = '<div class="err">' + esc(d.failed[0].error) + '</div>';
+        loadQueue();
+      }).catch(function(e){
+        setStatus("q-status", false, "");
+        $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      });
+  });
 
   /* ---------------- 热点 ---------------- */
   var trMeta = null;

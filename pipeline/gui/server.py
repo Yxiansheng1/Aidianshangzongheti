@@ -33,6 +33,28 @@ OUTPUT_DIR = ROOT / "output"
 
 CAPABILITIES: list[dict[str, Any]] = [
     {
+        "name": "queue.list",
+        "desc": "内容队列：列出所有条目和状态统计",
+        "method": "GET",
+        "path": "/api/queue",
+        "inputs": {},
+        "outputs": {"stats": "json", "items": "json"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
+        "name": "queue.step",
+        "desc": "对队列条目跑「AI 改写 + AI 审核」，按结果推进状态",
+        "method": "POST",
+        "path": "/api/queue/step",
+        "inputs": {"id": "str?", "ids": "list?"},
+        "outputs": {"done": "json", "failed": "json"},
+        "sync": True,
+        "slow": False,
+        "needs_model": True,
+    },
+    {
         "name": "write.draft",
         "desc": "AI 改写：主题 → 各平台口吻的标题+正文+标签",
         "method": "POST",
@@ -425,6 +447,69 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
 
 
+def do_queue_list() -> dict[str, Any]:
+    from .. import queue
+
+    items = queue.all_items()
+    return {
+        "stats": queue.stats(),
+        "statuses": queue.STATUS_FLOW,
+        "items": [i.as_dict() for i in items],
+    }
+
+
+def do_queue_add(params: dict[str, Any]) -> dict[str, Any]:
+    from .. import queue
+
+    item = queue.add(
+        str(params.get("topic") or ""),
+        str(params.get("platform") or "xiaohongshu"),
+        product=str(params.get("product") or ""),
+        extra=str(params.get("extra") or ""),
+        tone=str(params.get("tone") or ""),
+    )
+    return {"item": item.as_dict()}
+
+
+def do_queue_step(params: dict[str, Any]) -> dict[str, Any]:
+    """对一条或多条跑「写 + 审」。单条失败不影响其他。"""
+    from .. import queue
+
+    cfg = load_config()
+    ids = params.get("ids")
+    if not ids:
+        one = params.get("id")
+        ids = [one] if one else [i.id for i in queue.all_items("pending")]
+
+    done, failed = [], []
+    for item_id in ids:
+        try:
+            item = queue.step(str(item_id), cfg)
+            done.append(item.as_dict())
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"id": item_id, "error": str(exc)})
+
+    return {"done": done, "failed": failed, "stats": queue.stats()}
+
+
+def do_queue_set(params: dict[str, Any]) -> dict[str, Any]:
+    from .. import queue
+
+    item_id = str(params.get("id") or "")
+    status = str(params.get("status") or "")
+    if status not in queue.STATUS_FLOW:
+        raise ValueError(f"未知状态：{status}")
+    item = queue.update(item_id, status=status)
+    return {"item": item.as_dict(), "stats": queue.stats()}
+
+
+def do_queue_remove(params: dict[str, Any]) -> dict[str, Any]:
+    from .. import queue
+
+    ok = queue.remove(str(params.get("id") or ""))
+    return {"removed": ok, "stats": queue.stats()}
+
+
 def do_write(params: dict[str, Any]) -> dict[str, Any]:
     from ..writer import render_markdown, write
 
@@ -664,6 +749,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(_candidates_payload())
                 return
 
+            if route == "/api/queue":
+                self._json(do_queue_list())
+                return
+
             if route == "/api/trends/categories":
                 self._json(do_trends_meta())
                 return
@@ -757,6 +846,22 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/review":
                 self._json(do_review(payload))
+                return
+
+            if route == "/api/queue/add":
+                self._json(do_queue_add(payload))
+                return
+
+            if route == "/api/queue/step":
+                self._json(do_queue_step(payload))
+                return
+
+            if route == "/api/queue/set":
+                self._json(do_queue_set(payload))
+                return
+
+            if route == "/api/queue/remove":
+                self._json(do_queue_remove(payload))
                 return
 
             self._json({"error": "not found"}, 404)
