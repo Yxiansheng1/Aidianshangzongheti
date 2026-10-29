@@ -50,6 +50,7 @@ class Item:
     body: str = ""
     tags: list[str] = field(default_factory=list)
 
+    source: str = ""                    # 商品原图（AI 出图的输入，必须是人拍的）
     status: str = "pending"
     review: dict[str, Any] = field(default_factory=dict)
     images: list[str] = field(default_factory=list)

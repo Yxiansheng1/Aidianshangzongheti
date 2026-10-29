@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import subprocess
 import time
 import traceback
 import urllib.parse
@@ -445,6 +446,120 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
         ) from exc
 
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
+
+
+def do_queue_source(params: dict[str, Any]) -> dict[str, Any]:
+    """设商品原图（AI 出图的输入）。"""
+    from .. import queue
+
+    path = str(params.get("path") or "").strip().strip('"')
+    if not path:
+        raise ValueError("给一个图片路径")
+    target = Path(path)
+    if not target.is_file():
+        raise ValueError(f"文件不存在：{path}")
+
+    item = queue.update(str(params.get("id") or ""), source=str(target))
+    return {"item": item.as_dict()}
+
+
+def do_queue_gen(params: dict[str, Any]) -> dict[str, Any]:
+    """对队列条目跑 AI 出图。慢，走后台任务。"""
+    from .. import queue
+    from ..model.comfyui import ComfyClient, ComfyError, generate
+    from .jobs import REGISTRY
+
+    cfg = load_config()
+    item = queue.get(str(params.get("id") or ""))
+    if item is None:
+        raise KeyError(f"没有这条：{params.get('id')}")
+    if not item.source or not Path(item.source).is_file():
+        raise ValueError("先上传商品原图（AI 出图需要参考图）")
+
+    prompt = str(params.get("prompt") or "").strip()
+    if not prompt:
+        prompt = (
+            f"把商品放在干净的生活场景里，自然侧光，浅景深，背景轻微虚化，"
+            f"构图留白，商品保持原样不变形。主题参考：{item.title or item.topic}"
+        )
+
+    size = int(params.get("size") or cfg.local.width or 1024)
+    item_id = item.id
+
+    def work(job):
+        client = ComfyClient(cfg.local.comfyui_url)
+        if not client.is_up():
+            raise ComfyError("ComfyUI 没在跑，先启动 启动工作台.bat")
+
+        job.message = "AI 出图中，8GB 显存约 7 分钟"
+        out = OUTPUT_DIR / f"queue-{item_id}-{int(time.time())}.png"
+        path = generate(
+            client, item.source, prompt, out,
+            unet=cfg.local.unet, clip=cfg.local.clip, vae=cfg.local.vae,
+            width=size, height=size,
+            steps=cfg.local.steps, cfg=cfg.local.cfg, shift=cfg.local.shift,
+            wait_timeout=cfg.local.wait_timeout,
+        )
+        queue.update(item_id, images=[str(path)])
+        return {"path": str(path), "url": "/file?path=" + urllib.parse.quote(str(path))}
+
+    return {"job": REGISTRY.submit("queue-gen", work).to_dict()}
+
+
+def do_queue_pub(params: dict[str, Any]) -> dict[str, Any]:
+    """直接执行发布（真的发出去）。"""
+    from .. import queue
+    from ..publish.sau import build_plan, resolve_sau
+
+    cfg = load_config()
+    item = queue.get(str(params.get("id") or ""))
+    if item is None:
+        raise KeyError(f"没有这条：{params.get('id')}")
+    if not item.images:
+        raise ValueError("还没有图，先跑 AI 出图")
+    if not item.body.strip():
+        raise ValueError("还没有正文")
+
+    account = cfg.accounts.get(item.platform, "main")
+    product = {
+        "name": item.title or item.topic,
+        "title": item.title,
+        "body": item.body,
+        "tags": item.tags,
+        "images": item.images,
+    }
+    plan = build_plan(
+        product, item.platform, account=account,
+        sau_cmd=resolve_sau(cfg.sau_cmd, cfg.sau_cwd),
+        kind="note", headed=True,
+    )
+
+    try:
+        result = subprocess.run(
+            plan.argv,
+            cwd=cfg.sau_cwd or None,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "command": plan.command,
+                "output": "超过 300 秒没结束。可能卡住了，去 logs 看。"}
+
+    output = (result.stdout or "") + (result.stderr or "")
+    ok = result.returncode == 0 and "发布成功" in output
+
+    if ok:
+        queue.update(item.id, status="published")
+
+    return {
+        "ok": ok,
+        "returncode": result.returncode,
+        "command": plan.command,
+        "output": output[-1500:],
+    }
 
 
 def do_queue_image(params: dict[str, Any]) -> dict[str, Any]:
@@ -913,6 +1028,18 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/queue/image":
                 self._json(do_queue_image(payload))
+                return
+
+            if route == "/api/queue/source":
+                self._json(do_queue_source(payload))
+                return
+
+            if route == "/api/queue/gen":
+                self._json(do_queue_gen(payload))
+                return
+
+            if route == "/api/queue/pub":
+                self._json(do_queue_pub(payload))
                 return
 
             if route == "/api/queue/cmd":
