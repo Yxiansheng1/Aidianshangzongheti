@@ -153,6 +153,16 @@
         <span class="muted" id="tr-count"></span>
         <div class="spacer"></div>
         <label style="font-size:12.5px;display:flex;align-items:center;gap:5px">
+          加入队列时用
+          <select id="tr-platform" style="width:110px">
+            <option value="xiaohongshu">小红书</option>
+            <option value="zhihu">知乎</option>
+            <option value="baijiahao">百家号</option>
+            <option value="dayu">大鱼号</option>
+            <option value="douyin">抖音口播</option>
+          </select>
+        </label>
+        <label style="font-size:12.5px;display:flex;align-items:center;gap:5px">
           <input type="checkbox" id="tr-onlymatched"> 只看能蹭的
         </label>
         <button class="btn small" id="tr-save">存成 md</button>
@@ -675,7 +685,7 @@
       if(!list || !list.length) return;
       html += '<div style="margin-bottom:18px"><div class="muted" style="font-weight:600;margin-bottom:6px">' +
               esc(cat) + ' · ' + list.length + ' 条</div>';
-      html += '<table><thead><tr><th>#</th><th>来源</th><th>标题</th><th>标记</th></tr></thead><tbody>';
+      html += '<table><thead><tr><th>#</th><th>来源</th><th>标题</th><th>标记</th><th>操作</th></tr></thead><tbody>';
       list.forEach(function(it, i){
         var mark = it.blocked ? '<span class="grade g-淘汰">负面</span>'
                  : it.matched ? '<span class="grade g-主推">相关</span>' : "";
@@ -683,13 +693,33 @@
         var t = it.url
           ? '<a class="file-link" href="' + esc(it.url) + '" target="_blank" rel="noreferrer">' + title + '</a>'
           : title;
-        html += '<tr><td class="num">' + (i+1) + '</td><td>' + esc(it.source) + '</td><td>' + t + '</td><td>' + mark + '</td></tr>';
+        html += '<tr><td class="num">' + (i+1) + '</td><td>' + esc(it.source) + '</td><td>' + t + '</td><td>' + mark + '</td>' +
+          '<td><button class="btn small" data-trend="' + esc(it.title) + '">→ 写</button></td></tr>';
       });
       html += '</tbody></table></div>';
     });
 
     $("tr-result").className = "";
     $("tr-result").innerHTML = html || '<div class="empty">没有数据</div>';
+
+    Array.prototype.forEach.call($("tr-result").querySelectorAll("button[data-trend]"), function(btn){
+      btn.addEventListener("click", function(){
+        var platform = $("tr-platform").value;
+        btn.disabled = true;
+        fetch("/api/queue/add", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ topic: btn.dataset.trend, platform: platform })
+        }).then(function(r){ return r.json(); }).then(function(d){
+          btn.disabled = false;
+          if(d.error) throw new Error(d.error);
+          btn.textContent = "已加入";
+          setStatus("tr-status", false, "已加入内容队列：" + d.item.id + "（去「内容」页签跑写+审）");
+        }).catch(function(e){
+          btn.disabled = false;
+          alert(e.message);
+        });
+      });
+    });
   }
 
   /* ---------------- 出图 ---------------- */
