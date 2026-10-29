@@ -505,6 +505,7 @@
 
   /* ---------------- 写作台（项目B） ---------------- */
   var wJobs = {};
+  var lastContent = null;
 
   function loadWriterMeta(){
     fetch("/api/content/meta").then(function(r){ return r.json(); }).then(function(d){
@@ -577,12 +578,87 @@
       h += '</div></div>';
     }
 
+    h += '<div class="row" style="margin-top:18px;gap:8px;flex-wrap:wrap">';
+    if((d.images || []).length){
+      h += '<button class="btn" data-w="video">生成视频</button>';
+    }
+    h += '<button class="btn" data-w="pub" data-platform="小红书">发布到小红书</button>';
+    h += '<button class="btn" data-w="pub" data-platform="百家号">发布到百家号</button>';
+    h += '<button class="btn" data-w="cmd" data-platform="小红书">看发布命令</button>';
+    h += '</div>';
+    h += '<div id="w-extra" style="margin-top:14px"></div>';
+
     if(d.dir){
       h += '<div class="muted" style="margin-top:12px;font-size:11.5px">产物目录：' + esc(d.dir) + '</div>';
     }
 
     $("w-result").className = "";
     $("w-result").innerHTML = h;
+    lastContent = d;
+    var videoPath = "";
+
+    Array.prototype.forEach.call($("w-result").querySelectorAll("[data-w]"), function(btn){
+      btn.addEventListener("click", function(){
+        var kind = btn.dataset.w;
+        var platform = btn.dataset.platform || "小红书";
+        var extra = $("w-extra");
+
+        if(kind === "video"){
+          btn.disabled = true;
+          extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>拼视频中…</span></div>';
+          fetch("/api/content/video", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              images: (d.images || []).map(function(x){ return x.path; }),
+              dir: d.dir || ""
+            })
+          }).then(function(r){ return r.json(); }).then(function(res){
+            btn.disabled = false;
+            if(res.error) throw new Error(res.error);
+            videoPath = res.path;
+            extra.innerHTML = '<div class="muted" style="margin-bottom:8px">视频：' + res.info.duration +
+              ' 秒　' + res.info.width + '×' + res.info.height + '　' + res.info.size_mb + ' MB</div>' +
+              '<video controls src="' + res.url + '" style="max-width:280px;border-radius:8px;border:1px solid var(--line)"></video>';
+          }).catch(function(e){
+            btn.disabled = false;
+            extra.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+          });
+          return;
+        }
+
+        var payload = {
+          platform: platform,
+          title: (d.draft || {}).title || "",
+          body: (d.draft || {}).body || "",
+          tags: (d.draft || {}).tags || [],
+          images: (d.images || []).map(function(x){ return x.path; }),
+          video: videoPath,
+          execute: kind === "pub"
+        };
+        if(kind === "pub" && !confirm("真的发到「" + platform + "」？会打开浏览器自动发布。")) return;
+
+        btn.disabled = true;
+        extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>处理中…</span></div>';
+        fetch("/api/content/pub", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        }).then(function(r){ return r.json(); }).then(function(res){
+          btn.disabled = false;
+          if(res.error) throw new Error(res.error);
+          if(res.executed){
+            extra.innerHTML = res.ok
+              ? '<div class="advice">✅ 已发到 ' + esc(platform) + '</div>'
+              : '<div class="err">❌ 发布失败<br>' + esc((res.output || "").slice(-600)) + '</div>';
+          }else{
+            extra.innerHTML = '<div class="muted" style="margin-bottom:6px">发布命令（复制到自己终端跑）：</div>' +
+              '<pre class="cmd">' + esc(res.command) + '</pre>';
+          }
+        }).catch(function(e){
+          btn.disabled = false;
+          extra.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+        });
+      });
+    });
 
     var copyBtn = $("w-copy");
     if(copyBtn){

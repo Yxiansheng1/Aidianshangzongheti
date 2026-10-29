@@ -609,6 +609,57 @@ def do_queue_cmd(params: dict[str, Any]) -> dict[str, Any]:
     return {"command": plan.command, "warnings": plan.warnings, "platform": item.platform}
 
 
+def do_content_video(params: dict[str, Any]) -> dict[str, Any]:
+    """把一次生成的配图拼成竖版轮播视频。秒级完成。"""
+    from ..content.video import info, slideshow
+
+    images = params.get("images") or []
+    if not images:
+        raise ValueError("没有图片可拼")
+
+    out_dir = Path(str(params.get("dir") or (OUTPUT_DIR / "内容" / "video")))
+    out = out_dir / f"video-{int(time.time())}.mp4"
+
+    path = slideshow(
+        images, out,
+        seconds_per_image=float(params.get("seconds") or 3),
+    )
+    return {
+        "path": str(path),
+        "url": "/file?path=" + urllib.parse.quote(str(path)),
+        "info": info(path),
+    }
+
+
+def do_content_pub(params: dict[str, Any]) -> dict[str, Any]:
+    """生成发布命令；execute=true 时直接发。"""
+    from ..content import publish as pub
+
+    cfg = load_config()
+    platform = str(params.get("platform") or "")
+    if not platform:
+        raise ValueError("没指定平台")
+
+    payload = {
+        "title": str(params.get("title") or ""),
+        "body": str(params.get("body") or ""),
+        "tags": list(params.get("tags") or []),
+        "images": list(params.get("images") or []),
+        "video": str(params.get("video") or ""),
+    }
+
+    if str(params.get("execute") or "") in ("1", "true", "yes"):
+        result = pub.execute(platform, cfg, **payload)
+        return {
+            "executed": True,
+            "ok": result.ok,
+            "command": result.command,
+            "output": result.output,
+        }
+
+    return {"executed": False, **pub.build(platform, cfg=cfg, **payload)}
+
+
 def do_content_meta() -> dict[str, Any]:
     from ..content.rewrite import list_skills
 
@@ -1169,6 +1220,14 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/content/skill":
                 self._json(do_content_skill(payload))
+                return
+
+            if route == "/api/content/video":
+                self._json(do_content_video(payload))
+                return
+
+            if route == "/api/content/pub":
+                self._json(do_content_pub(payload))
                 return
 
             self._json({"error": "not found"}, 404)
