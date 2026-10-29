@@ -20,14 +20,33 @@ from ..text2img import Text2ImgConfig, generate
 
 SYSTEM = "你是视觉策划。只输出 JSON，不要代码围栏，不要解释。"
 
-PLAN_PROMPT = """从下面这篇要发小红书的文案里，挑 {n} 个最值得配图的画面。
+# 所有配图统一的风格。小红书调性是「生活实拍」，不是商业图库。
+STYLE_SUFFIX = (
+    ", warm natural light, cozy lived-in interior, everyday objects with texture, "
+    "shallow depth of field, 35mm film look, muted warm tones, quiet mood, "
+    "no text, no logo, no watermark, no human face"
+)
 
-要求：
-- 画面要支撑文案的情绪或观点，不是随便的风景照
-- 写英文 SDXL 提示词，结构是：主体 + 场景 + 光线 + 镜头/景深 + 风格
-- 画面里不要出现文字、logo、可识别的真人脸
-- 每条 prompt 30-60 个英文单词
-- 风格统一：写实摄影感，柔和自然光，低饱和
+NEGATIVE = (
+    "corporate, business suit, skyscraper, city skyline, office building, "
+    "neon, cold blue tone, stock photo, studio lighting, plastic look, "
+    "text, watermark, logo, signature, human face, portrait, "
+    "lowres, blurry, deformed, jpeg artifacts, worst quality"
+)
+
+PLAN_PROMPT = """从下面这篇要发**小红书**的文案里，挑 {n} 个最值得配图的画面。
+
+这是小红书配图，不是商业图库、不是新闻配图。调性要求：
+
+- **生活化实拍感**：像一个人在自己家里用手机/相机随手拍的
+- **有具体物件**：桌面、书本、杯子、植物、衣物、食物、窗台、地板纹理
+- **暖色调**：窗光、台灯、黄昏；不要冷蓝调、不要霓虹
+- **不出现人脸**：可以拍手、背影、局部、空镜
+- **不要**：西装、办公室、城市天际线、企业形象照、纯色背景产品图
+- 画面要能支撑文案的情绪，不是随便的风景
+
+写英文 SDXL 提示词，结构：主体 + 具体物件 + 场景 + 光线 + 镜头
+每条 25–50 个英文单词。不要写文字、logo、人脸。
 
 文案标题：{title}
 
@@ -100,7 +119,14 @@ def render(
     out: list[Path] = []
     for index, scene in enumerate(scenes, 1):
         target = folder / f"{prefix}-{index}.png"
-        generate(client, scene["prompt"], target, cfg=t2i, seed=index * 1000)
+        # 统一后缀 + 统一负向词，保证多张图风格一致
+        prompt = scene["prompt"].rstrip(" .,") + STYLE_SUFFIX
+        generate(
+            client, prompt, target,
+            cfg=t2i, seed=index * 1000,
+            negative=NEGATIVE,
+        )
+        scene["final_prompt"] = prompt
         scene["file"] = str(target)
         out.append(target)
     return out
