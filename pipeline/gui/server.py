@@ -34,13 +34,13 @@ OUTPUT_DIR = ROOT / "output"
 CAPABILITIES: list[dict[str, Any]] = [
     {
         "name": "trends.fetch",
-        "desc": "抓百度/微博热搜，按关注词筛相关，自动过滤负面新闻",
+        "desc": "抓热点菜单（国内热搜 + AI科技 + 国际 + 军事），标注哪些能蹭",
         "method": "GET",
-        "path": "/api/trends?top=10&sources=baidu,weibo&save=1",
-        "inputs": {"top": "int?", "sources": "str?", "save": "bool?"},
-        "outputs": {"total": "int", "matched": "int", "hot": "json", "markdown": "str"},
+        "path": "/api/trends?categories=国内热搜,AI与科技&save=1",
+        "inputs": {"sources": "str?", "categories": "str?", "save": "bool?"},
+        "outputs": {"total": "int", "matched": "int", "items": "json", "markdown": "str"},
         "sync": True,
-        "slow": False,
+        "slow": True,
         "needs_model": False,
     },
     {
@@ -406,11 +406,18 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
 def do_trends(params: dict[str, Any]) -> dict[str, Any]:
     from ..trends import collect, render_markdown, save
 
-    top = int(params.get("top") or 10)
+    cfg = load_config()
     raw_sources = params.get("sources")
+    raw_cats = params.get("categories")
     sources = [s.strip() for s in raw_sources.split(",")] if raw_sources else None
+    categories = [c.strip() for c in raw_cats.split(",")] if raw_cats else None
 
-    result = collect(sources=sources, top=top)
+    result = collect(
+        sources=sources,
+        keywords=cfg.trends.keywords or None,
+        proxy=cfg.trends.proxy or None,
+        categories=categories,
+    )
     payload = result.as_dict()
     payload["markdown"] = render_markdown(result)
 
@@ -509,6 +516,18 @@ def do_publish(params: dict[str, Any]) -> dict[str, Any]:
 # ------------------------------------------------------------------ HTTP
 
 
+def _fix_mojibake(text: str) -> str:
+    """修复「原始 UTF-8 字节被当成 latin-1 解码」的经典乱码。
+
+    http.server 按 latin-1 解析请求行，所以直接拼接中文查询参数会变成乱码。
+    这里尝试还原；还原不了就原样返回。
+    """
+    try:
+        return text.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "AIDianshang/0.1"
 
@@ -566,7 +585,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if route == "/api/trends":
-                params = {k: v[0] for k, v in query.items() if v}
+                params = {k: _fix_mojibake(v[0]) for k, v in query.items() if v}
                 self._json(do_trends(params))
                 return
 

@@ -56,9 +56,18 @@ class LocalConfig:
 
 
 @dataclass
+class TrendsConfig:
+    """热点抓取。国外源要代理，国内源直连。"""
+
+    proxy: str = "http://127.0.0.1:7897"
+    keywords: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AppConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
+    trends: TrendsConfig = field(default_factory=TrendsConfig)
     mxpage_output_dir: str = ""
     sau_cmd: str = "sau"
     sau_cwd: str = ""
@@ -93,6 +102,12 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     raw_local = data.get("local", {})
     known_local = set(LocalConfig.__dataclass_fields__)
     cfg.local = LocalConfig(**{k: v for k, v in raw_local.items() if k in known_local})
+
+    raw_trends = data.get("trends", {})
+    cfg.trends = TrendsConfig(
+        proxy=raw_trends.get("proxy", cfg.trends.proxy),
+        keywords=list(raw_trends.get("keywords") or []),
+    )
 
     cfg.mxpage_output_dir = data.get("mxpage", {}).get("output_dir", "")
 

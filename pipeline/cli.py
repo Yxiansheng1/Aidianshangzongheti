@@ -289,11 +289,18 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 def _cmd_trends(args: argparse.Namespace) -> int:
     from .trends import collect, render_markdown, save
 
+    cfg = load_config(args.config)
     sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
-    result = collect(sources=sources, top=args.top)
+    categories = [c.strip() for c in args.category.split(",")] if args.category else None
 
-    text = render_markdown(result)
-    print(text)
+    result = collect(
+        sources=sources,
+        keywords=cfg.trends.keywords or None,
+        proxy=cfg.trends.proxy or None,
+        categories=categories,
+    )
+
+    print(render_markdown(result))
 
     if args.save:
         path = save(result, Path("output") / "热点")
@@ -463,10 +470,10 @@ def main(argv: list[str] | None = None) -> int:
     p_an.add_argument("--dry-run", action="store_true", help="只打印提示词，不调模型")
     p_an.set_defaults(func=_cmd_analyze)
 
-    p_tr = sub.add_parser("trends", help="抓今日热点（百度/微博热搜），按关注词筛相关")
+    p_tr = sub.add_parser("trends", help="抓热点（国内 + 国外），按分类列菜单")
     _add_config(p_tr)
-    p_tr.add_argument("--top", type=int, default=10, help="最多显示几条，默认 10")
-    p_tr.add_argument("--sources", help="来源，逗号分隔：baidu,weibo。默认全抓")
+    p_tr.add_argument("--sources", help="来源，逗号分隔。可选：baidu weibo hn arxiv techcrunch verge ars googlenews bbc defense")
+    p_tr.add_argument("--category", help="分类，逗号分隔。可选：国内热搜 AI与科技 国际时事 军事")
     p_tr.add_argument("--save", action="store_true", help="同时保存到 output/热点/日期.md")
     p_tr.set_defaults(func=_cmd_trends)
 

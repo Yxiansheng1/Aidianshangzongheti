@@ -67,8 +67,7 @@ xiaohongshu = "main"
 douyin = "main"
 zhihu = "main"
 
-[orchestrate]
-# n8n 的 webhook 地址。工作台点「交给 n8n 全自动」时往这里 POST。
+[orchestrate]# n8n 的 webhook 地址。工作台点「交给 n8n 全自动」时往这里 POST。
 # 注意：改过工作流之后，必须在 n8n 里把工作流「停用→再启用」一次，
 # 否则 webhook 不会重新注册，会返回 404。
 webhook_url = "http://127.0.0.1:5678/webhook/ecom-gen-video"

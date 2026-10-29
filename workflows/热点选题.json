@@ -23,7 +23,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://127.0.0.1:8899/api/trends?top=10&save=1",
+        "url": "http://127.0.0.1:8899/api/trends?save=1",
         "options": {
           "timeout": 90000
         }
