@@ -151,9 +151,11 @@
         </div>
 
         <button class="btn primary" id="gen-go">开始生成</button>
+        <button class="btn" id="gen-orch" style="margin-left:8px">交给 n8n 全自动（出图→视频）</button>
         <div class="status-line" id="gen-status"></div>
         <div id="gen-error"></div>
-        <div class="hint">8GB 显存跑 20GB 模型，一张约 <b>8 分钟</b>。生成期间不要关这个页面。</div>
+        <div class="hint">8GB 显存跑 20GB 模型，一张约 <b>8 分钟</b>。生成期间不要关这个页面。<br>
+          「交给 n8n」会立刻返回，之后由 n8n 在后台跑完出图和视频，可以关掉页面。</div>
       </div>
 
       <div class="card">
@@ -394,6 +396,38 @@
       $("gen-error").innerHTML = '<div class="err">' + e.message + '</div>';
       $("gen-result").className = "empty";
       $("gen-result").textContent = "生成失败";
+    });
+  });
+
+  $("gen-orch").addEventListener("click", function(){
+    if(!state.genPath){ alert("先选一张商品原图"); return; }
+    var prompt = $("gen-prompt").value.trim();
+    if(!prompt){ alert("提示词不能为空"); return; }
+    $("gen-error").innerHTML = "";
+    $("gen-orch").disabled = true;
+    setStatus("gen-status", true, "正在交给 n8n…");
+
+    fetch("/api/orchestrate", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        source: state.genPath,
+        prompt: prompt,
+        videoPrompt: ($("vid-prompt") || {}).value || "",
+        size: parseInt($("gen-size").value, 10)
+      })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      $("gen-orch").disabled = false;
+      if(res.error) throw new Error(res.error);
+      setStatus("gen-status", false, "已交给 n8n");
+      $("gen-result").className = "";
+      $("gen-result").innerHTML =
+        '<div class="advice" style="margin:0">已交给 n8n，后台自动跑。<br>' +
+        '<span style="font-size:12px">出图约 8 分钟 + 视频约 14 分钟，可以关掉本页。<br>' +
+        '看进度：<b>http://localhost:5678</b> → Executions</span></div>';
+    }).catch(function(e){
+      $("gen-orch").disabled = false;
+      setStatus("gen-status", false, "");
+      $("gen-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
     });
   });
 

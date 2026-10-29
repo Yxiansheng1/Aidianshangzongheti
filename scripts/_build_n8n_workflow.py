@@ -110,14 +110,27 @@ def wait(name, seconds, pos, notes=None):
 
 nodes = [
     node("手动开始", "n8n-nodes-base.manualTrigger", 1, (0, 300),
-         notes="点上面的 Execute workflow 开始"),
+         notes="点上面的 Execute workflow 手动跑"),
+
+    node("Webhook 触发", "n8n-nodes-base.webhook", 2, (0, 180),
+         {
+             "httpMethod": "POST",
+             "path": "ecom-gen-video",
+             "responseMode": "onReceived",
+             "options": {},
+         },
+         notes="POST http://127.0.0.1:5678/webhook/ecom-gen-video 即可触发，立即返回"),
 
     setter("参数", [
-        ("source", "D:\\AIdianshangzongheti\\input_uploads\\在这里填图片绝对路径.png"),
-        ("imagePrompt", "把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，商品保持原样不变形"),
-        ("videoPrompt", "镜头缓慢推进，光线缓缓移动，画面安静高级"),
-        ("size", "1024"),
-    ], (200, 300), notes="跑之前改这里：原图路径 + 两个提示词"),
+        ("source",
+         "={{ $json.body?.source || 'D:/AIdianshangzongheti/input_uploads/1793178507-0621.jpg_wh860.jpg' }}"),
+        ("imagePrompt",
+         "={{ $json.body?.imagePrompt || '把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，商品保持原样不变形' }}"),
+        ("videoPrompt",
+         "={{ $json.body?.videoPrompt || '镜头缓慢推进，光线缓缓移动，画面安静高级' }}"),
+        ("size", "={{ $json.body?.size || 1024 }}"),
+    ], (200, 300),
+        notes="Webhook 调用时从这里读 body.source / body.imagePrompt / body.videoPrompt / body.size，没传就用默认值"),
 
     http("提交出图", "POST", f"{BASE}/api/gen", (420, 300),
          body="={{ JSON.stringify({ source: $json.source, prompt: $json.imagePrompt, size: parseInt($json.size) }) }}",
@@ -161,6 +174,12 @@ nodes = [
 ]
 
 
+# Webhook 节点需要一个稳定的 webhookId，否则每次导入 URL 会变
+for _n in nodes:
+    if _n["type"] == "n8n-nodes-base.webhook":
+        _n["webhookId"] = str(uuid.uuid4())
+
+
 def link(src, targets):
     """targets: 按输出索引排列，每个元素是目标节点名或 None。"""
     out = []
@@ -171,6 +190,7 @@ def link(src, targets):
 
 connections = dict([
     link("手动开始", ["参数"]),
+    link("Webhook 触发", ["参数"]),
     link("参数", ["提交出图"]),
     link("提交出图", ["记图任务"]),
     link("记图任务", ["等图20秒"]),

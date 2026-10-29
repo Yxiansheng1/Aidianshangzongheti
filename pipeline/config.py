@@ -66,6 +66,7 @@ class AppConfig:
     dry_run: bool = True
     accounts: dict[str, str] = field(default_factory=dict)
     zhihu_category: str = "家居生活"
+    orchestrate_webhook: str = "http://127.0.0.1:5678/webhook/ecom-gen-video"
     source: Path | None = None
 
     @property
@@ -102,5 +103,8 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     cfg.dry_run = bool(pub.get("dry_run", True))
     cfg.accounts = dict(pub.get("accounts", {}))
     cfg.zhihu_category = pub.get("zhihu_category", cfg.zhihu_category)
+
+    orch = data.get("orchestrate", {})
+    cfg.orchestrate_webhook = orch.get("webhook_url", cfg.orchestrate_webhook)
 
     return cfg

@@ -33,6 +33,17 @@ OUTPUT_DIR = ROOT / "output"
 
 CAPABILITIES: list[dict[str, Any]] = [
     {
+        "name": "orchestrate.produce",
+        "desc": "交给 n8n 全自动跑：出图 → 轮询 → 出视频 → 轮询",
+        "method": "POST",
+        "path": "/api/orchestrate",
+        "inputs": {"source": "path", "prompt": "str", "videoPrompt": "str?", "size": "int?"},
+        "outputs": {"webhook": "str", "n8n": "str"},
+        "sync": True,
+        "slow": False,
+        "needs_model": False,
+    },
+    {
         "name": "analyze.product",
         "desc": "商品分析 + 生图/视频提示词 + 小红书文案",
         "method": "POST",
@@ -331,6 +342,56 @@ def do_ingest(params: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
+    """把任务交给 n8n：POST 到它的 webhook，立刻返回，真正的活由 n8n 异步跑。"""
+    import urllib.error
+    import urllib.request
+
+    cfg = load_config()
+    url = (cfg.orchestrate_webhook or "").strip()
+    if not url:
+        raise ValueError("config.toml 里没有配置 [orchestrate] webhook_url")
+
+    raw_source = str(params.get("source") or "").strip()
+    if not raw_source:
+        raise ValueError("先选一张商品原图")
+    source = Path(raw_source)
+    if not source.is_file():
+        raise ValueError(f"图片不存在：{source}")
+
+    payload = {
+        # n8n 在 Windows 上对反斜杠转义容易出问题，统一用正斜杠
+        "source": str(source.resolve()).replace("\\", "/"),
+        "imagePrompt": str(params.get("prompt") or "").strip(),
+        "videoPrompt": str(params.get("videoPrompt") or "").strip(),
+        "size": int(params.get("size") or 1024),
+    }
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:300]
+        if exc.code == 404:
+            raise RuntimeError(
+                "n8n 说这个 webhook 没注册。通常是工作流没启用，"
+                "或者改过之后没重新启用——去 n8n 里把工作流关掉再打开一次。"
+            ) from exc
+        raise RuntimeError(f"n8n 返回 {exc.code}：{detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"连不上 n8n（{url}）：{exc.reason}。先双击 启动n8n.bat"
+        ) from exc
+
+    return {"webhook": url, "n8n": body.strip(), "payload": payload}
+
+
 def do_analyze(params: dict[str, Any]) -> dict[str, Any]:
     from ..analyze import ProductBrief, analyze, render_markdown
     from ..fetch import FetchError, fetch
@@ -547,6 +608,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/analyze":
                 self._json(do_analyze(payload))
+                return
+
+            if route == "/api/orchestrate":
+                self._json(do_orchestrate(payload))
                 return
 
             self._json({"error": "not found"}, 404)

@@ -27,6 +27,7 @@ if errorlevel 1 (
 
 set N8N_USER_FOLDER=D:\n8n\data
 set N8N_PORT=5678
+set N8N_LISTEN_ADDRESS=127.0.0.1
 set N8N_SECURE_COOKIE=false
 set N8N_DIAGNOSTICS_ENABLED=false
 

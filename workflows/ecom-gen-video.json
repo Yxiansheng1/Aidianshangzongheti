@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {},
-      "id": "4d608f44-90c2-4c7e-a4a5-0d88fa2c82e9",
+      "id": "271ce0b2-a5dc-4c40-8914-525f59fa3a95",
       "name": "手动开始",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
@@ -11,42 +11,61 @@
         0,
         300
       ],
-      "notes": "点上面的 Execute workflow 开始",
+      "notes": "点上面的 Execute workflow 手动跑",
       "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ecom-gen-video",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "74796ea6-8db0-4e37-b2f5-6dfd967c2214",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        180
+      ],
+      "notes": "POST http://127.0.0.1:5678/webhook/ecom-gen-video 即可触发，立即返回",
+      "notesInFlow": true,
+      "webhookId": "4923fb51-1c5f-49b1-9e07-19bbf9f6d7b7"
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "3a74e0c5-f960-46a7-b15f-c4d76cc724a3",
+              "id": "b3ff85b1-7c49-4a4c-8af2-b98019594afb",
               "name": "source",
-              "value": "D:\\AIdianshangzongheti\\input_uploads\\在这里填图片绝对路径.png",
+              "value": "={{ $json.body?.source || 'D:/AIdianshangzongheti/input_uploads/1793178507-0621.jpg_wh860.jpg' }}",
               "type": "string"
             },
             {
-              "id": "f1a3ffd4-f638-4399-aba7-6d08c71af1c0",
+              "id": "def8f655-b293-4d81-81ac-b25dc21fefbd",
               "name": "imagePrompt",
-              "value": "把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，商品保持原样不变形",
+              "value": "={{ $json.body?.imagePrompt || '把商品放在浅色木纹桌面上，清晨柔和侧光，浅景深，背景轻微虚化，商品保持原样不变形' }}",
               "type": "string"
             },
             {
-              "id": "c6f736b0-ee18-4a2b-884b-03cd90cb42c9",
+              "id": "da35d17f-480b-462f-b4ab-3e642a7a5195",
               "name": "videoPrompt",
-              "value": "镜头缓慢推进，光线缓缓移动，画面安静高级",
+              "value": "={{ $json.body?.videoPrompt || '镜头缓慢推进，光线缓缓移动，画面安静高级' }}",
               "type": "string"
             },
             {
-              "id": "410a1422-7f17-416f-9df6-847512e6155d",
+              "id": "ab653b09-0044-4ccb-9a30-e29a708ba030",
               "name": "size",
-              "value": "1024",
+              "value": "={{ $json.body?.size || 1024 }}",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "b88b1ee2-1e87-4f51-9ac9-bd7fdc2bd3b5",
+      "id": "58dde361-ae5a-45d1-83b0-ccfe718afd6c",
       "name": "参数",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -54,7 +73,7 @@
         200,
         300
       ],
-      "notes": "跑之前改这里：原图路径 + 两个提示词",
+      "notes": "Webhook 调用时从这里读 body.source / body.imagePrompt / body.videoPrompt / body.size，没传就用默认值",
       "notesInFlow": true
     },
     {
@@ -68,7 +87,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ source: $json.source, prompt: $json.imagePrompt, size: parseInt($json.size) }) }}"
       },
-      "id": "7c05e3bd-4ef3-4e4a-94da-5911cf780251",
+      "id": "d7dc01d1-7f81-49ee-aa26-d032a4d39b5c",
       "name": "提交出图",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -84,7 +103,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "7e4e2514-5104-4604-92c6-01d73c42177a",
+              "id": "4edfe3ad-682d-4980-9fb9-a37e1ca8787f",
               "name": "jobId",
               "value": "={{ $json.job.id }}",
               "type": "string"
@@ -93,7 +112,7 @@
         },
         "options": {}
       },
-      "id": "e73d2715-91c4-46da-a852-3f0f1cc3ae62",
+      "id": "178bbb02-ccbd-4ac3-9ff5-9fc34641f6d0",
       "name": "记图任务",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -108,7 +127,7 @@
         "amount": 20,
         "unit": "seconds"
       },
-      "id": "987aee85-00d4-4720-81ae-b4b5f3bf65d0",
+      "id": "65c5c808-de47-4768-b0e5-f4ac506289c3",
       "name": "等图20秒",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -127,7 +146,7 @@
           "timeout": 120000
         }
       },
-      "id": "917d97df-bf51-4ccd-9076-24c7e82e4e09",
+      "id": "f2f102e5-e676-4d93-8c2a-973ed245fedf",
       "name": "查图状态",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -146,7 +165,7 @@
           },
           "conditions": [
             {
-              "id": "63e22902-731e-4af9-a841-297f2eaab913",
+              "id": "89ecde12-632d-41fc-a01e-6328a08a2ea2",
               "leftValue": "={{ $json.status }}",
               "rightValue": "error",
               "operator": {
@@ -159,7 +178,7 @@
         },
         "options": {}
       },
-      "id": "a6006991-4946-403a-8bd3-96099e91d4fc",
+      "id": "977a5804-7121-4215-8ff6-e6b964c2d7e1",
       "name": "图失败?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -178,7 +197,7 @@
           },
           "conditions": [
             {
-              "id": "23c9d2a4-9ccf-4d5a-8d7a-a829f0737faf",
+              "id": "a7650526-4a63-43e6-9732-e791f3969c10",
               "leftValue": "={{ $json.status }}",
               "rightValue": "done",
               "operator": {
@@ -191,7 +210,7 @@
         },
         "options": {}
       },
-      "id": "44f3e681-f2a4-493c-b029-b42da4797f1f",
+      "id": "1dcfb378-d6bd-4e58-81ed-00146a8c99d6",
       "name": "图完成?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -202,7 +221,7 @@
     },
     {
       "parameters": {},
-      "id": "7c17b9cb-1760-4f2a-9bd2-8fe27d362287",
+      "id": "df8e0fa2-39e0-40d7-9e9c-c2aad164ecb5",
       "name": "停-出图失败",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
@@ -216,7 +235,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "cfcc0a43-c3cf-40ff-82f7-8c782b33fba0",
+              "id": "1fdf4279-2006-405a-a237-c2ccd188a83f",
               "name": "imagePath",
               "value": "={{ $json.result.path }}",
               "type": "string"
@@ -225,7 +244,7 @@
         },
         "options": {}
       },
-      "id": "b330b6e4-0428-4e5c-aa5a-64be03e04f5f",
+      "id": "4faec7cc-97b0-494e-9259-f86ef55eb87b",
       "name": "出图结果",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -245,7 +264,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ source: $json.imagePath, prompt: $('参数').item.json.videoPrompt }) }}"
       },
-      "id": "e745ee27-9513-4fb1-996a-6925dbac6f80",
+      "id": "e9c31a5e-d08a-4d3e-b177-a881efe355a4",
       "name": "提交视频",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -259,7 +278,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "cf6e1c07-670d-44f9-b3d2-8c2f49cf2cb8",
+              "id": "e05db841-0c5a-49d3-bf58-2fc0411fc3ae",
               "name": "jobId",
               "value": "={{ $json.job.id }}",
               "type": "string"
@@ -268,7 +287,7 @@
         },
         "options": {}
       },
-      "id": "e9bbe480-e5d6-491a-a362-8854ae1496b3",
+      "id": "2bf00555-925e-4b98-a023-d3fe8a93e8e5",
       "name": "记视频任务",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -283,7 +302,7 @@
         "amount": 60,
         "unit": "seconds"
       },
-      "id": "8700228a-1e08-4f42-874d-85d85e613e1a",
+      "id": "91fff463-7f38-4224-83c7-d5a610486866",
       "name": "等视频60秒",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
@@ -302,7 +321,7 @@
           "timeout": 120000
         }
       },
-      "id": "7a78c396-3492-4781-9410-3772771cbce9",
+      "id": "16a804b5-e013-4ab5-ad64-f2d802ad4eb4",
       "name": "查视频状态",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -321,7 +340,7 @@
           },
           "conditions": [
             {
-              "id": "2f8be3cb-1f31-4a11-a83b-ff150f527990",
+              "id": "9645cffb-0ebe-47be-bf2f-91196770e7e5",
               "leftValue": "={{ $json.status }}",
               "rightValue": "error",
               "operator": {
@@ -334,7 +353,7 @@
         },
         "options": {}
       },
-      "id": "aa7235bc-0425-4970-afd7-cb667233b892",
+      "id": "d2b2a1b8-b04f-4c3d-bf77-2c210ea76335",
       "name": "视频失败?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -353,7 +372,7 @@
           },
           "conditions": [
             {
-              "id": "35dff287-bc39-4154-8aba-c25b87c01f1c",
+              "id": "4ea5fe96-c7fb-450d-85cb-0ccdf1181211",
               "leftValue": "={{ $json.status }}",
               "rightValue": "done",
               "operator": {
@@ -366,7 +385,7 @@
         },
         "options": {}
       },
-      "id": "bb538f59-f276-4c89-aa89-55e55c8e63b8",
+      "id": "ca56ad57-4c6d-4b7f-941b-34a84d2fddf2",
       "name": "视频完成?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
@@ -377,7 +396,7 @@
     },
     {
       "parameters": {},
-      "id": "99d69483-346d-48a4-a271-5f247ec4fc5e",
+      "id": "8bde4303-1fa3-411a-825e-6fd8d9d3be79",
       "name": "停-视频失败",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
@@ -391,13 +410,13 @@
         "assignments": {
           "assignments": [
             {
-              "id": "704eea88-64f3-45e3-af70-8979cd1873c2",
+              "id": "2e5ba2e9-70fd-47dd-a3fb-64c2fc169e76",
               "name": "image",
               "value": "={{ $('出图结果').item.json.imagePath }}",
               "type": "string"
             },
             {
-              "id": "b79a6e58-b5f2-4a9a-939e-224139425350",
+              "id": "b4be6cdf-e255-47a8-8531-aa7f9ebcf58e",
               "name": "video",
               "value": "={{ $json.result.path }}",
               "type": "string"
@@ -406,7 +425,7 @@
         },
         "options": {}
       },
-      "id": "bec0eefa-8048-4d5d-beb6-4985ca88ca7d",
+      "id": "d2574e2a-c450-4c5d-92c1-7fdb42f2ea22",
       "name": "完成",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -418,6 +437,17 @@
   ],
   "connections": {
     "手动开始": {
+      "main": [
+        [
+          {
+            "node": "参数",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 触发": {
       "main": [
         [
           {
