@@ -195,6 +195,12 @@
         <button class="btn" id="q-run">对待写的批量跑「写+审」</button>
         <span class="muted" id="q-hint"></span>
       </div>
+      <div class="hint">
+        <b>这个页签只管到「文案就绪」，不负责发布。</b><br>
+        「标记为已发布」只是改状态做记录，不会发到任何平台。真发布有两条路：<br>
+        ① n8n 的「内容生产流水线」把 <code>publish</code> 改成 yes<br>
+        ② 在命令行手动跑 sau（我会给你生成命令）
+      </div>
       <div class="status-line" id="q-status"></div>
       <div id="q-error"></div>
     </div>
@@ -487,8 +493,14 @@
       if(it.status === "pending" || it.status === "needs_fix" || it.status === "written"){
         ops.push('<button class="btn small" data-act="step" data-id="' + esc(it.id) + '">写+审</button>');
       }
+      if(!it.images || !it.images.length){
+        ops.push('<button class="btn small" data-act="image" data-id="' + esc(it.id) + '">配图</button>');
+      }
       if(it.status === "approved"){
-        ops.push('<button class="btn small" data-act="publish" data-id="' + esc(it.id) + '">标记已发</button>');
+        if(it.images && it.images.length){
+          ops.push('<button class="btn small primary" data-act="cmd" data-id="' + esc(it.id) + '">复制发布命令</button>');
+        }
+        ops.push('<button class="btn small" data-act="publish" data-id="' + esc(it.id) + '" title="只改状态，不会真的发出去">标记为已发布</button>');
         ops.push('<button class="btn small" data-act="reject" data-id="' + esc(it.id) + '">退回</button>');
       }
       if(it.status === "needs_fix"){
@@ -526,6 +538,29 @@
       if(!confirm("删除 " + id + "？")) return;
       fetch("/api/queue/remove", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id})})
         .then(function(r){ return r.json(); }).then(loadQueue);
+      return;
+    }
+    if(act === "image"){
+      var path = prompt("图片绝对路径：\n\n用自己的实拍图，别用带水印的素材。");
+      if(!path) return;
+      fetch("/api/queue/image", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id:id, path:path})
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if(d.error) throw new Error(d.error);
+        loadQueue();
+      }).catch(function(e){ $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+      return;
+    }
+    if(act === "cmd"){
+      fetch("/api/queue/cmd", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id:id})
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if(d.error) throw new Error(d.error);
+        try { navigator.clipboard.writeText(d.command); } catch(e){}
+        alert("命令已复制到剪贴板。\n粘到 PowerShell 里跑（会打开浏览器窗口，是你要手动看着的）：\n\n" + d.command);
+      }).catch(function(e){ $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
       return;
     }
     if(act === "step"){

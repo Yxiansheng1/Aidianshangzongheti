@@ -447,6 +447,53 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
 
 
+def do_queue_image(params: dict[str, Any]) -> dict[str, Any]:
+    from .. import queue
+
+    path = str(params.get("path") or "").strip().strip('"')
+    if not path:
+        raise ValueError("给一个图片路径")
+    target = Path(path)
+    if not target.is_file():
+        raise ValueError(f"文件不存在：{path}")
+
+    item = queue.update(str(params.get("id") or ""), images=[str(target)], video="")
+    return {"item": item.as_dict()}
+
+
+def do_queue_cmd(params: dict[str, Any]) -> dict[str, Any]:
+    """给队列条目生成 sau 发布命令（只生成，不执行）。"""
+    from .. import queue
+    from ..publish.sau import build_plan, resolve_sau
+
+    cfg = load_config()
+    item = queue.get(str(params.get("id") or ""))
+    if item is None:
+        raise KeyError(f"没有这条：{params.get('id')}")
+    if not item.images:
+        raise ValueError("这条还没配图，先点「配图」")
+    if not item.body.strip():
+        raise ValueError("这条还没写正文")
+
+    account = cfg.accounts.get(item.platform, "main")
+    product = {
+        "name": item.title or item.topic,
+        "title": item.title,
+        "body": item.body,
+        "tags": item.tags,
+        "images": item.images,
+    }
+    plan = build_plan(
+        product,
+        item.platform,
+        account=account,
+        sau_cmd=resolve_sau(cfg.sau_cmd, cfg.sau_cwd),
+        kind="note",
+        headed=True,
+    )
+    return {"command": plan.command, "warnings": plan.warnings, "platform": item.platform}
+
+
 def do_queue_list() -> dict[str, Any]:
     from .. import queue
 
@@ -862,6 +909,14 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/queue/remove":
                 self._json(do_queue_remove(payload))
+                return
+
+            if route == "/api/queue/image":
+                self._json(do_queue_image(payload))
+                return
+
+            if route == "/api/queue/cmd":
+                self._json(do_queue_cmd(payload))
                 return
 
             self._json({"error": "not found"}, 404)
