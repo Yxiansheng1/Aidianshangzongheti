@@ -648,7 +648,8 @@ def do_content_pub(params: dict[str, Any]) -> dict[str, Any]:
         "video": str(params.get("video") or ""),
     }
 
-    if str(params.get("execute") or "") in ("1", "true", "yes"):
+    flag = params.get("execute")
+    if flag is True or str(flag or "").lower() in ("1", "true", "yes"):
         result = pub.execute(platform, cfg, **payload)
         return {
             "executed": True,
@@ -847,7 +848,7 @@ def do_write(params: dict[str, Any]) -> dict[str, Any]:
     payload = dict(result)
     payload["markdown"] = render_markdown(result)
 
-    if str(params.get("review") or "") in ("1", "true", "yes"):
+    if str(params.get("review") or "").lower() in ("1", "true", "yes") or params.get("review") is True:
         from ..review import review
 
         combined = f"{result['title']}\n\n{result['body']}"
@@ -908,7 +909,7 @@ def do_trends(params: dict[str, Any]) -> dict[str, Any]:
     payload = result.as_dict()
     payload["markdown"] = render_markdown(result)
 
-    if str(params.get("save") or "") in ("1", "true", "yes"):
+    if str(params.get("save") or "").lower() in ("1", "true", "yes") or params.get("save") is True:
         path = save(result, ROOT / "output" / "热点")
         payload["saved"] = str(path)
 
