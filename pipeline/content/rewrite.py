@@ -235,6 +235,23 @@ def build_user_prompt(topic: str, source_text: str, *, extra: str = "") -> str:
     return "\n".join(parts)
 
 
+def _trim_incomplete(text: str, limit: int) -> str:
+    """收拾硬截留下的半句。
+
+    两种收法，按「能保住多少内容」选：
+    - 上一个句号留下的内容够多（≥ 上限的 60%）→ 退回到那个句号
+    - 否则说明整段才一句，回退会砍掉大半 → 直接补个句号收尾
+
+    实测「…或想本地部署却没有算力」这种结尾，读起来就是话没说完。
+    """
+    if text.rstrip().endswith(("。", "！", "？", "!", "?", "…")):
+        return text
+    match = re.search(r"[。！？!?][^。！？!?]*$", text)
+    if match and len(text[: match.start() + 1]) >= limit * 0.6:
+        return text[: match.start() + 1].rstrip()
+    return text.rstrip().rstrip("，,、；;") + "。"
+
+
 def _fit_length(
     client: OpenAICompatible,
     system: str,
@@ -254,11 +271,13 @@ def _fit_length(
         if over else
         f"补上 {low - len(body)} 字左右，优先补原文里有、但正文漏掉的细节"
     )
+    # 让它比上限再少几个字，免得压完还贴着上限、一改就又超
+    target_high = max(low + 10, high - 3)
     try:
         raw = _ask(
             client,
             RESIZE_PROMPT.format(
-                platform=platform, current=len(body), low=low, high=high,
+                platform=platform, current=len(body), low=low, high=target_high,
                 action=action, body=body,
             ),
             system, max_tokens=8000, temperature=0.5,
@@ -270,7 +289,7 @@ def _fit_length(
         pass
 
     if len(body) > high:
-        body = _smart_truncate(body, high)
+        body = _trim_incomplete(_smart_truncate(body, high), high)
         gaps.append(f"正文超过 {platform} 的字数上限（{high} 字），已截断，结尾可能不完整")
     return body
 
@@ -374,6 +393,10 @@ def rewrite(
 
     if len(title) > title_limit:
         title = _smart_truncate(title, title_limit)
+
+    # 后面几轮改写可能已经改短了，别把「已截断」的旧提示留着误导人
+    if len(body) <= high:
+        gaps = [g for g in gaps if not g.startswith("正文超过")]
 
     # 本地兜底检查：skill 里列的禁词，模型偶尔还是漏
     banned = ["此外", "至关重要", "赋能", "助力", "总的来说", "综上所述",
