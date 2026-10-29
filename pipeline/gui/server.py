@@ -629,8 +629,34 @@ def do_queue_add(params: dict[str, Any]) -> dict[str, Any]:
         product=str(params.get("product") or ""),
         extra=str(params.get("extra") or ""),
         tone=str(params.get("tone") or ""),
+        source_url=str(params.get("source_url") or ""),
+        source_text=str(params.get("source_text") or ""),
     )
     return {"item": item.as_dict()}
+
+
+def do_queue_refetch(params: dict[str, Any]) -> dict[str, Any]:
+    """按 source_url 抓原文，存进 source_text。"""
+    from .. import queue
+    from ..article import ArticleError, fetch
+
+    cfg = load_config()
+    item = queue.get(str(params.get("id") or ""))
+    if item is None:
+        raise KeyError(f"没有这条：{params.get('id')}")
+    if not item.source_url:
+        raise ValueError("这条没有原文链接，先补一个 source_url")
+
+    article = fetch(item.source_url, proxy=cfg.trends.proxy or None)
+    if not article.ok:
+        raise ArticleError(article.note or "没抓到正文")
+
+    updated = queue.update(item.id, source_text=article.text)
+    return {
+        "item": updated.as_dict(),
+        "chars": article.chars,
+        "title": article.title,
+    }
 
 
 def do_queue_step(params: dict[str, Any]) -> dict[str, Any]:
@@ -1044,6 +1070,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/queue/cmd":
                 self._json(do_queue_cmd(payload))
+                return
+
+            if route == "/api/queue/refetch":
+                self._json(do_queue_refetch(payload))
                 return
 
             self._json({"error": "not found"}, 404)

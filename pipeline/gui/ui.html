@@ -484,7 +484,10 @@
   }
 
   function nextStep(it){
-    if(it.status === "pending") return "下一步：点「写+审」，AI 出稿并审核";
+    if(it.status === "pending"){
+      if(it.source_url && !it.source_text) return "先点「抓原文」，再点「写+审」";
+      return "下一步：点「写+审」" + (it.source_text ? "（已带原文 " + it.source_text.length + " 字）" : "（没有原文，只能凭标题写）");
+    }
     if(it.status === "written") return "下一步：点「写+审」重新审核";
     if(it.status === "needs_fix") return "审核没过，看看问题再改（或换角度重写）";
     if(it.status === "approved"){
@@ -523,6 +526,9 @@
         approved:"g-主推", published:"g-主推", rejected:"g-淘汰"
       }[it.status] || "";
       var ops = [];
+      if(it.source_url && !it.source_text){
+        ops.push('<button class="btn small primary" data-act="refetch" data-id="' + esc(it.id) + '">抓原文</button>');
+      }
       if(it.status === "pending" || it.status === "needs_fix" || it.status === "written"){
         ops.push('<button class="btn small" data-act="step" data-id="' + esc(it.id) + '">写+审</button>');
       }
@@ -627,6 +633,21 @@
         if(d.error) throw new Error(d.error);
         alert("这条会在终端里跑：\n\n" + d.command);
       }).catch(function(e){ $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>'; });
+      return;
+    }
+    if(act === "refetch"){
+      setStatus("q-status", true, "抓原文中…");
+      fetch("/api/queue/refetch", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({id:id})
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if(d.error) throw new Error(d.error);
+        setStatus("q-status", false, "原文已抓到：" + d.chars + " 字");
+        loadQueue();
+      }).catch(function(e){
+        setStatus("q-status", false, "");
+        $("q-error").innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+      });
       return;
     }
     if(act === "step"){
@@ -795,7 +816,7 @@
           ? '<a class="file-link" href="' + esc(it.url) + '" target="_blank" rel="noreferrer">' + title + '</a>'
           : title;
         html += '<tr><td class="num">' + (i+1) + '</td><td>' + esc(it.source) + '</td><td>' + t + '</td><td>' + mark + '</td>' +
-          '<td><button class="btn small" data-trend="' + esc(it.title) + '">→ 写</button></td></tr>';
+          '<td><button class="btn small" data-trend="' + esc(it.title) + '" data-url="' + esc(it.url || '') + '">→ 写</button></td></tr>';
       });
       html += '</tbody></table></div>';
     });
@@ -809,7 +830,11 @@
         btn.disabled = true;
         fetch("/api/queue/add", {
           method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ topic: btn.dataset.trend, platform: platform })
+          body: JSON.stringify({
+            topic: btn.dataset.trend,
+            platform: platform,
+            source_url: btn.dataset.url || ""
+          })
         }).then(function(r){ return r.json(); }).then(function(d){
           btn.disabled = false;
           if(d.error) throw new Error(d.error);

@@ -97,7 +97,8 @@ PLATFORMS: dict[str, PlatformStyle] = {
 PLATFORM_NAMES = {k: v.name for k, v in PLATFORMS.items()}
 
 
-def build_prompt(topic: str, platform: str, *, product: str = "", extra: str = "") -> str:
+def build_prompt(topic: str, platform: str, *, product: str = "", extra: str = "",
+                 source_text: str = "") -> str:
     style = PLATFORMS.get(platform)
     if not style:
         raise ValueError(f"不支持的平台：{platform}。可选：{', '.join(PLATFORMS)}")
@@ -108,6 +109,17 @@ def build_prompt(topic: str, platform: str, *, product: str = "", extra: str = "
         "",
         f"主题：{topic}",
     ]
+    if source_text:
+        parts += [
+            "",
+            "以下是抓到的原文，**必须以它为事实依据改写**：",
+            '"""',
+            source_text[:4000],
+            '"""',
+            "改写要求：保留原文的事实、数字、专有名词、当事人；"
+            "重新组织语言和切入角度，写成符合平台风格的内容；"
+            "**原文没有的信息不要添加**。",
+        ]
     if product:
         parts.append(f"要推广的商品：{product}")
     if extra:
@@ -147,6 +159,7 @@ def write(
     product: str = "",
     extra: str = "",
     tone: str = "",
+    source_text: str = "",
 ) -> dict[str, Any]:
     if not cfg.has_model:
         raise ModelError(
@@ -169,7 +182,7 @@ def write(
         text_model=cfg.model.text_model,
     )
 
-    prompt = build_prompt(topic, platform, product=product, extra=extra)
+    prompt = build_prompt(topic, platform, product=product, extra=extra, source_text=source_text)
     if tone:
         prompt += f"\n语气：{tone}"
 

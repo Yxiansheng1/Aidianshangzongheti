@@ -60,6 +60,7 @@ class TrendItem:
     title: str
     url: str = ""
     heat: str = ""
+    summary: str = ""          # RSS 里的导语，改写时的第一手材料
     matched: bool = False      # 命中关注词
     blocked: bool = False      # 命中负面词
 
@@ -71,6 +72,7 @@ class TrendItem:
             "title": self.title,
             "url": self.url,
             "heat": self.heat,
+            "summary": self.summary,
             "matched": self.matched,
             "blocked": self.blocked,
         }
@@ -267,21 +269,25 @@ def _fetch_hn(proxy: str | None) -> list[TrendItem]:
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 
-def _parse_feed(raw: bytes) -> list[tuple[str, str, str]]:
-    """返回 [(标题, 链接, 时间)]，同时支持 RSS 2.0 和 Atom。"""
+def _parse_feed(raw: bytes) -> list[tuple[str, str, str, str]]:
+    """返回 [(标题, 链接, 时间, 导语)]，同时支持 RSS 2.0 和 Atom。"""
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as exc:
         raise ValueError(f"不是合法 XML：{exc}") from exc
 
-    out: list[tuple[str, str, str]] = []
+    out: list[tuple[str, str, str, str]] = []
 
     for node in root.iter("item"):
         title = (node.findtext("title") or "").strip()
         link = (node.findtext("link") or "").strip()
         date = (node.findtext("pubDate") or "").strip()
+        desc = (node.findtext("description") or "").strip()
+        # description 里常常带 HTML，去掉标签
+        desc = re.sub(r"<[^>]+>", " ", desc)
+        desc = re.sub(r"\s+", " ", desc).strip()
         if title:
-            out.append((title, link, date))
+            out.append((title, link, date, desc))
 
     if not out:
         for node in root.iter(f"{ATOM}entry"):
@@ -289,8 +295,9 @@ def _parse_feed(raw: bytes) -> list[tuple[str, str, str]]:
             link_node = node.find(f"{ATOM}link")
             link = link_node.get("href", "") if link_node is not None else ""
             date = (node.findtext(f"{ATOM}updated") or node.findtext(f"{ATOM}published") or "").strip()
+            desc = (node.findtext(f"{ATOM}summary") or "").strip()
             if title:
-                out.append((title, link, date))
+                out.append((title, link, date, desc))
 
     return out
 
@@ -304,9 +311,9 @@ def _make_rss_fetcher(source: str, name: str, category: str, url: str, limit: in
         return [
             TrendItem(
                 source=source, source_name=name, category=category,
-                rank=index, title=title.strip(), url=link,
+                rank=index, title=title.strip(), url=link, summary=desc,
             )
-            for index, (title, link, _date) in enumerate(entries, 1)
+            for index, (title, link, _date, desc) in enumerate(entries, 1)
         ]
 
     return fetch

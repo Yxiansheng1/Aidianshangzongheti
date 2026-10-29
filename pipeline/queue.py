@@ -45,6 +45,8 @@ class Item:
     product: str = ""
     extra: str = ""
     tone: str = ""
+    source_url: str = ""                # 原文链接
+    source_text: str = ""               # 原文正文，改写的依据
 
     title: str = ""
     body: str = ""
@@ -108,7 +110,8 @@ def _next_id(items: list[Item]) -> str:
 
 
 def add(topic: str, platform: str = "xiaohongshu", *, product: str = "",
-        extra: str = "", tone: str = "") -> Item:
+        extra: str = "", tone: str = "", source_url: str = "",
+        source_text: str = "") -> Item:
     if not topic.strip():
         raise ValueError("主题不能为空")
     items = _load()
@@ -119,6 +122,8 @@ def add(topic: str, platform: str = "xiaohongshu", *, product: str = "",
         product=product,
         extra=extra,
         tone=tone,
+        source_url=source_url,
+        source_text=source_text,
         created=_now(),
         updated=_now(),
     )
@@ -181,6 +186,7 @@ def write_item(item_id: str, cfg: Any) -> Item:
         product=item.product,
         extra=item.extra,
         tone=item.tone,
+        source_text=item.source_text,
     )
     return update(
         item_id,
