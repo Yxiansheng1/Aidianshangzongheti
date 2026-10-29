@@ -403,6 +403,20 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
 
 
+def do_trends_meta() -> dict[str, Any]:
+    from ..trends import CATEGORIES, SOURCES
+
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for source in SOURCES:
+        grouped.setdefault(source.category, []).append({"key": source.key, "name": source.name})
+
+    return {
+        "categories": [c for c in CATEGORIES if c in grouped],
+        "sources": grouped,
+        "total_sources": len(SOURCES),
+    }
+
+
 def do_trends(params: dict[str, Any]) -> dict[str, Any]:
     from ..trends import collect, render_markdown, save
 
@@ -582,6 +596,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/candidates":
                 self._json(_candidates_payload())
+                return
+
+            if route == "/api/trends/categories":
+                self._json(do_trends_meta())
                 return
 
             if route == "/api/trends":

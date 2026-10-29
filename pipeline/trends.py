@@ -42,7 +42,10 @@ UA = (
 
 DEFAULT_PROXY = "http://127.0.0.1:7897"
 
-CATEGORIES = ["国内热搜", "AI与科技", "国际时事", "军事"]
+CATEGORIES = [
+    "国内热搜", "AI与科技", "政治", "国际", "军事",
+    "财经", "影视", "体育", "学术", "游戏",
+]
 
 
 # --------------------------------------------------------------- 数据模型
@@ -322,12 +325,12 @@ class Source:
 
 
 SOURCES: list[Source] = [
+    # 国内
     Source("baidu", "百度热搜", "国内热搜", False, _fetch_baidu),
     Source("weibo", "微博热搜", "国内热搜", False, _fetch_weibo),
+
+    # AI 与科技
     Source("hn", "Hacker News", "AI与科技", True, _fetch_hn),
-    Source("arxiv", "arXiv cs.AI", "AI与科技", True,
-           _make_rss_fetcher("arxiv", "arXiv cs.AI", "AI与科技",
-                             "https://export.arxiv.org/rss/cs.AI", limit=10)),
     Source("techcrunch", "TechCrunch", "AI与科技", True,
            _make_rss_fetcher("techcrunch", "TechCrunch", "AI与科技",
                              "https://techcrunch.com/feed/", limit=12)),
@@ -337,15 +340,67 @@ SOURCES: list[Source] = [
     Source("ars", "Ars Technica", "AI与科技", True,
            _make_rss_fetcher("ars", "Ars Technica", "AI与科技",
                              "https://feeds.arstechnica.com/arstechnica/index", limit=12)),
-    Source("googlenews", "Google News", "国际时事", True,
-           _make_rss_fetcher("googlenews", "Google News", "国际时事",
+
+    # 政治
+    Source("politico", "Politico", "政治", True,
+           _make_rss_fetcher("politico", "Politico", "政治",
+                             "https://rss.politico.com/politics-news.xml", limit=15)),
+
+    # 国际
+    Source("googlenews", "Google News", "国际", True,
+           _make_rss_fetcher("googlenews", "Google News", "国际",
                              "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", limit=15)),
-    Source("bbc", "BBC", "国际时事", True,
-           _make_rss_fetcher("bbc", "BBC", "国际时事",
+    Source("bbc", "BBC", "国际", True,
+           _make_rss_fetcher("bbc", "BBC", "国际",
                              "https://feeds.bbci.co.uk/news/rss.xml", limit=15)),
+    Source("npr", "NPR", "国际", True,
+           _make_rss_fetcher("npr", "NPR", "国际",
+                             "https://feeds.npr.org/1001/rss.xml", limit=12)),
+
+    # 军事
     Source("defense", "Defense News", "军事", True,
            _make_rss_fetcher("defense", "Defense News", "军事",
                              "https://www.defensenews.com/arc/outboundfeeds/rss/", limit=12)),
+
+    # 财经
+    Source("cnbc", "CNBC", "财经", True,
+           _make_rss_fetcher("cnbc", "CNBC", "财经",
+                             "https://www.cnbc.com/id/100003114/device/rss/rss.html", limit=12)),
+    Source("marketwatch", "MarketWatch", "财经", True,
+           _make_rss_fetcher("marketwatch", "MarketWatch", "财经",
+                             "http://feeds.marketwatch.com/marketwatch/topstories/", limit=12)),
+
+    # 影视
+    Source("variety", "Variety", "影视", True,
+           _make_rss_fetcher("variety", "Variety", "影视",
+                             "https://variety.com/feed/", limit=12)),
+    Source("deadline", "Deadline", "影视", True,
+           _make_rss_fetcher("deadline", "Deadline", "影视",
+                             "https://deadline.com/feed/", limit=12)),
+    Source("thr", "Hollywood Reporter", "影视", True,
+           _make_rss_fetcher("thr", "Hollywood Reporter", "影视",
+                             "https://www.hollywoodreporter.com/feed/", limit=12)),
+
+    # 体育
+    Source("bbcsport", "BBC Sport", "体育", True,
+           _make_rss_fetcher("bbcsport", "BBC Sport", "体育",
+                             "http://feeds.bbci.co.uk/sport/rss.xml", limit=15)),
+
+    # 学术
+    Source("arxiv", "arXiv cs.AI", "学术", True,
+           _make_rss_fetcher("arxiv", "arXiv cs.AI", "学术",
+                             "https://export.arxiv.org/rss/cs.AI", limit=10)),
+    Source("nature", "Nature", "学术", True,
+           _make_rss_fetcher("nature", "Nature", "学术",
+                             "https://www.nature.com/nature.rss", limit=10)),
+    Source("science", "Science", "学术", True,
+           _make_rss_fetcher("science", "Science", "学术",
+                             "https://www.science.org/rss/news_current.xml", limit=10)),
+
+    # 游戏
+    Source("ign", "IGN", "游戏", True,
+           _make_rss_fetcher("ign", "IGN", "游戏",
+                             "https://feeds.ign.com/ign/all", limit=12)),
 ]
 
 SOURCE_MAP = {s.key: s for s in SOURCES}
