@@ -107,7 +107,8 @@ nodes = [
         ("platform", "xiaohongshu"),
         ("product", "渐变杯装香薰蜡烛，大豆蜡，燃烧约25小时"),
         ("sourceImage", "D:/AIdianshangzongheti/input_uploads/1793178507-0621.jpg_wh860.jpg"),
-    ], (200, 320), notes="跑之前改这里：主题、平台、商品、出图用的原图"),
+        ("publish", "no"),
+    ], (200, 320), notes="跑之前改这里。publish 填 yes 才会真的发出去，默认 no 只跑到出图。"),
 
     setter("拼写稿提示词", [
         ("system",
@@ -191,6 +192,7 @@ nodes = [
             "  issuesText: issues.map(i => `[${i.level}] ${i.claim || ''} -> ${i.advice || ''}`).join('\\n'),\n"
             "  title: $('解析稿件').first().json.title,\n"
             "  body: $('解析稿件').first().json.body,\n"
+            "  tags: $('解析稿件').first().json.tags,\n"
             "  sourceImage: $('参数').first().json.sourceImage\n"
             "} }];"
         )
@@ -257,7 +259,45 @@ nodes = [
         ("verdict", "=通过（{{ $('解析审核').first().json.score }} 分）"),
         ("image", "={{ $json.result.path }}"),
         ("title", "={{ $('解析审核').first().json.title }}"),
-    ], (2840, 220), notes="拿到图了。下一步可以接发布。"),
+        ("body", "={{ $('解析审核').first().json.body }}"),
+        ("tags", "={{ $('解析审核').first().json.tags }}"),
+        ("platform", "={{ $('参数').first().json.platform }}"),
+        ("publish", "={{ $('参数').first().json.publish }}"),
+    ], (2840, 220), notes="素材齐了。接下来按 publish 决定发不发。"),
+
+    node("要发布吗", "n8n-nodes-base.if", 2, (3060, 220), {
+        "conditions": {
+            "options": {"caseSensitive": True, "leftValue": "", "typeValidation": "loose"},
+            "conditions": [{
+                "id": nid(),
+                "leftValue": "={{ $json.publish }}",
+                "rightValue": "yes",
+                "operator": {"type": "string", "operation": "equals"},
+            }],
+            "combinator": "and",
+        },
+        "options": {},
+    }, notes="参数里 publish 填 yes 才走上面。默认 no，不会误发。"),
+
+    node("发布到小红书", "n8n-nodes-base.executeCommand", 1, (3280, 120), {
+        "command": (
+            "=\"D:/social-auto-upload/.venv/Scripts/sau.exe\" xiaohongshu upload-note "
+            "--account main "
+            "--images \"{{ $json.image }}\" "
+            "--title \"{{ $json.title }}\" "
+            "--note \"{{ $json.body }}\" "
+            "--tags \"{{ $json.tags }}\" "
+            "--headed"
+        )
+    }, notes="真的发出去。注意 --headed：无头模式容易被平台识别为自动化"),
+
+    setter("发布完成", [
+        ("结果", "={{ $json.stdout }}"),
+    ], (3500, 120), notes="看 stdout，出现「图文发布成功」就是发出去了"),
+
+    setter("跳过发布", [
+        ("结果", "=参数里 publish = no，只出了图，没发布。image={{ $json.image }}"),
+    ], (3280, 340), notes="默认走这条，安全"),
 ]
 
 
@@ -282,6 +322,8 @@ connections = dict([
     link("等20秒", ["查图状态"]),
     link("查图状态", ["图完成?"]),
     link("图完成?", ["完成", "等20秒"]),
+    link("完成", ["要发布吗"]),
+    link("要发布吗", ["发布到小红书", "跳过发布"]),
 ])
 
 workflow = {
