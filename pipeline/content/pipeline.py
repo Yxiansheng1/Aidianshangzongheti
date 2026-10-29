@@ -77,7 +77,7 @@ def run(
 
     # ③ 审核
     try:
-        checked = review(f"{draft['title']}\n\n{draft['body']}", platform, cfg)
+        checked = review(f"{draft['title']}\n\n{draft['body']}", platform, cfg, source_text=text)
         result["steps"]["review"] = {
             "ok": True,
             "passed": checked.passed,

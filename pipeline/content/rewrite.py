@@ -16,6 +16,25 @@ from ..model.client import ModelError, OpenAICompatible
 SKILL_DIR = Path(__file__).parent / "skills"
 DEFAULT_SKILL = "小红书"
 
+# 各平台的硬限制。skill 里写了，代码也兜一层，防止模型不听话。
+TITLE_LIMITS = {"小红书": 20, "头条": 30, "百家号": 30}
+TAG_LIMITS = {"小红书": 8, "头条": 5, "百家号": 5}
+
+
+def _smart_truncate(text: str, limit: int) -> str:
+    """按字数截断，但不要砍在词中间。
+
+    优先在标点或空格处断开；找不到就硬截。
+    """
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    floor = max(1, int(limit * 0.6))
+    for i in range(len(head) - 1, floor, -1):
+        if head[i] in "，。、；：！？,.;: ":
+            return head[:i].rstrip()
+    return head
+
 
 def list_skills() -> list[str]:
     if not SKILL_DIR.is_dir():
@@ -109,8 +128,11 @@ def rewrite(
     tags = [str(t).strip().lstrip("#") for t in (data.get("tags") or []) if str(t).strip()]
     gaps = [str(g).strip() for g in (data.get("gaps") or []) if str(g).strip()]
 
-    if len(title) > 20:
-        title = title[:20]
+    title_limit = TITLE_LIMITS.get(platform, 30)
+    tag_limit = TAG_LIMITS.get(platform, 5)
+
+    if len(title) > title_limit:
+        title = _smart_truncate(title, title_limit)
 
     # 本地兜底检查：skill 里列的禁词，模型偶尔还是漏
     banned = ["此外", "至关重要", "赋能", "助力", "总的来说", "综上所述",
@@ -125,7 +147,7 @@ def rewrite(
         "topic": topic,
         "title": title,
         "body": body,
-        "tags": tags[:8],
+        "tags": tags[:tag_limit],
         "gaps": gaps,
         "length": len(body),
     }

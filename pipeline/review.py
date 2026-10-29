@@ -228,28 +228,39 @@ CLAIM_CHECK_SCHEMA = """{
   ]
 }"""
 
-CLAIM_CHECK_PROMPT = """逐条判断下面这些表述。
+CLAIM_CHECK_PROMPT = """逐条判断下面这些表述能不能站得住。
 
 先分清两类：
 - **主观**：个人感受、偏好、比喻、场景描写。这类不需要证据，判「主观」。
 - **事实性断言**：数字、材质、效果承诺、对比结论。这类要证据。
 
 对事实性断言，按这个标准判：
-- 属实：常识或普遍事实，不需要额外证据
+- 属实：常识或普遍事实；**或者在下面给的原文里能找到直接依据**
 - 存疑：可能对，但缺依据，需要作者提供来源/检测/实测
-- 无法证实：涉及具体数据但没有任何来源（销量、检测报告、临床数据）
+- 无法证实：涉及具体数据，**原文里也没有**，也没有任何来源
 - 夸大：明显超出合理范围，或把普通商品说成功效产品
 
 保守一点。事实性断言拿不准就判「存疑」，不要替作者找理由。
 但**不要把主观感受判成问题** —— 那是在制造噪音。
+**也不要把原文里明确写了的事实判成无法证实** —— 那是在制造假警报。
 
 文案背景：发在{platform}
+
+{source_block}
 
 待判断：
 {claims}
 
 按这个 JSON 输出：
 {schema}
+"""
+
+SOURCE_BLOCK = """原文（改写依据，逐条比对）：
+\"\"\"
+{source}
+\"\"\"
+
+**判断时先在这里面找。找到了就判「属实」，不要因为"看起来像具体数据"就判无法证实。**
 """
 
 
@@ -274,7 +285,7 @@ def extract_claims(text: str, cfg: Any) -> list[str]:
     return claims[:10]
 
 
-def check_claims(claims: list[str], platform: str, cfg: Any) -> list[Issue]:
+def check_claims(claims: list[str], platform: str, cfg: Any, *, source_text: str = "") -> list[Issue]:
     if not claims:
         return []
 
@@ -285,8 +296,17 @@ def check_claims(claims: list[str], platform: str, cfg: Any) -> list[Issue]:
         text_model=cfg.model.text_model,
     )
     listed = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, 1))
+
+    if source_text.strip():
+        source_block = SOURCE_BLOCK.format(source=source_text[:4000])
+    else:
+        source_block = "（没有提供原文，只能凭常识判断。具体数字要格外严格。）"
+
     raw = client.ask(
-        CLAIM_CHECK_PROMPT.format(platform=platform, claims=listed, schema=CLAIM_CHECK_SCHEMA),
+        CLAIM_CHECK_PROMPT.format(
+            platform=platform, claims=listed,
+            source_block=source_block, schema=CLAIM_CHECK_SCHEMA,
+        ),
         system=SYSTEM, max_tokens=2500, temperature=0.2,
     )
     body = _strip_fence(raw)
@@ -378,7 +398,8 @@ def ai_check(text: str, platform: str, cfg: Any) -> tuple[list[Issue], int, str]
 # --------------------------------------------------------------- 主流程
 
 
-def review(text: str, platform: str, cfg: Any, *, use_ai: bool = True) -> ReviewResult:
+def review(text: str, platform: str, cfg: Any, *, use_ai: bool = True,
+           source_text: str = "") -> ReviewResult:
     """规则层 + 断言级核查。
 
     断言级是主力：先把文稿拆成可核查的事实性表述，逐条判「属实/存疑/无法证实/夸大」。
@@ -394,7 +415,7 @@ def review(text: str, platform: str, cfg: Any, *, use_ai: bool = True) -> Review
         try:
             claims = extract_claims(text, cfg)
             result.claims_checked = len(claims)
-            result.issues.extend(check_claims(claims, platform, cfg))
+            result.issues.extend(check_claims(claims, platform, cfg, source_text=source_text))
             result.ai_used = True
         except ModelError as exc:
             result.summary = f"AI 核查不可用（{str(exc)[:60]}），仅规则层结果"
