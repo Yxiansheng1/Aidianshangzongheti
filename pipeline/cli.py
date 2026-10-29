@@ -308,6 +308,77 @@ def _cmd_trends(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_write(args: argparse.Namespace) -> int:
+    from .model.client import ModelError
+    from .review import render_markdown as render_review
+    from .review import review
+    from .writer import PLATFORMS, render_markdown, write
+
+    cfg = load_config(args.config)
+
+    if args.platform not in PLATFORMS:
+        print(f"不支持的平台：{args.platform}")
+        print(f"可选：{', '.join(PLATFORMS)}")
+        return 2
+
+    try:
+        result = write(
+            args.topic,
+            args.platform,
+            cfg,
+            product=args.product or "",
+            extra=args.extra or "",
+            tone=args.tone or "",
+        )
+    except (ModelError, ValueError) as exc:
+        print(f"失败：{exc}")
+        return 1
+
+    print(render_markdown(result))
+
+    if args.out:
+        target = Path(args.out)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_markdown(result), encoding="utf-8")
+        print(f"\n已保存：{target.resolve()}")
+
+    if args.review:
+        print()
+        combined = f"{result['title']}\n\n{result['body']}"
+        outcome = review(combined, args.platform, cfg)
+        print(render_review(outcome))
+
+    return 0
+
+
+def _cmd_review(args: argparse.Namespace) -> int:
+    from .model.client import ModelError
+    from .review import render_markdown, review
+
+    cfg = load_config(args.config)
+
+    if args.file:
+        path = Path(args.file)
+        if not path.is_file():
+            print(f"找不到文件：{path}")
+            return 2
+        text = path.read_text(encoding="utf-8")
+    elif args.text:
+        text = args.text
+    else:
+        print("给一个 --file 或 --text")
+        return 2
+
+    try:
+        result = review(text, args.platform, cfg, use_ai=not args.no_ai)
+    except (ModelError, ValueError) as exc:
+        print(f"失败：{exc}")
+        return 1
+
+    print(render_markdown(result))
+    return 0 if result.passed else 1
+
+
 def _cmd_package(args: argparse.Namespace) -> int:
     cfg = load_config(args.config)
     manifest_path = Path(args.manifest)
@@ -476,6 +547,26 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--category", help="分类，逗号分隔。可选：国内热搜 AI与科技 国际时事 军事")
     p_tr.add_argument("--save", action="store_true", help="同时保存到 output/热点/日期.md")
     p_tr.set_defaults(func=_cmd_trends)
+
+    p_wr = sub.add_parser("write", help="AI 改写：把主题写成各平台能发的稿子")
+    _add_config(p_wr)
+    p_wr.add_argument("--topic", required=True, help="主题或热点标题")
+    p_wr.add_argument("--platform", required=True,
+                      help="xiaohongshu / zhihu / baijiahao / dayu / douyin")
+    p_wr.add_argument("--product", help="要推广的商品")
+    p_wr.add_argument("--extra", help="补充信息")
+    p_wr.add_argument("--tone", help="语气，例如 轻松 / 专业 / 克制")
+    p_wr.add_argument("--out", help="保存到文件")
+    p_wr.add_argument("--review", action="store_true", help="生成后立即跑一遍审核")
+    p_wr.set_defaults(func=_cmd_write)
+
+    p_rv = sub.add_parser("review", help="AI 审核：发文前查禁词和夸大表述")
+    _add_config(p_rv)
+    p_rv.add_argument("--file", help="要审的文件路径")
+    p_rv.add_argument("--text", help="直接给一段文字")
+    p_rv.add_argument("--platform", default="xiaohongshu", help="目标平台")
+    p_rv.add_argument("--no-ai", action="store_true", help="只用规则层，不调模型（快且免费）")
+    p_rv.set_defaults(func=_cmd_review)
 
     p_pub = sub.add_parser("publish", help="按清单发布")
     _add_config(p_pub)

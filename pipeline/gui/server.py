@@ -33,6 +33,28 @@ OUTPUT_DIR = ROOT / "output"
 
 CAPABILITIES: list[dict[str, Any]] = [
     {
+        "name": "write.draft",
+        "desc": "AI 改写：主题 → 各平台口吻的标题+正文+标签",
+        "method": "POST",
+        "path": "/api/write",
+        "inputs": {"topic": "str", "platform": "str", "product": "str?", "extra": "str?", "tone": "str?", "review": "bool?"},
+        "outputs": {"title": "str", "body": "str", "tags": "list", "review": "json?"},
+        "sync": True,
+        "slow": False,
+        "needs_model": True,
+    },
+    {
+        "name": "review.content",
+        "desc": "AI 审核：规则禁词 + 断言级核查（属实/存疑/无法证实/夸大）",
+        "method": "POST",
+        "path": "/api/review",
+        "inputs": {"text": "str", "platform": "str", "use_ai": "bool?"},
+        "outputs": {"passed": "bool", "score": "int", "issues": "json", "claims_checked": "int"},
+        "sync": True,
+        "slow": False,
+        "needs_model": True,
+    },
+    {
         "name": "trends.fetch",
         "desc": "抓热点菜单（国内热搜 + AI科技 + 国际 + 军事），标注哪些能蹭",
         "method": "GET",
@@ -403,6 +425,50 @@ def do_orchestrate(params: dict[str, Any]) -> dict[str, Any]:
     return {"webhook": url, "n8n": body.strip(), "payload": payload}
 
 
+def do_write(params: dict[str, Any]) -> dict[str, Any]:
+    from ..writer import render_markdown, write
+
+    cfg = load_config()
+    result = write(
+        str(params.get("topic") or ""),
+        str(params.get("platform") or "xiaohongshu"),
+        cfg,
+        product=str(params.get("product") or ""),
+        extra=str(params.get("extra") or ""),
+        tone=str(params.get("tone") or ""),
+    )
+    payload = dict(result)
+    payload["markdown"] = render_markdown(result)
+
+    if str(params.get("review") or "") in ("1", "true", "yes"):
+        from ..review import review
+
+        combined = f"{result['title']}\n\n{result['body']}"
+        outcome = review(combined, result["platform"], cfg)
+        payload["review"] = outcome.as_dict()
+
+    return payload
+
+
+def do_review(params: dict[str, Any]) -> dict[str, Any]:
+    from ..review import render_markdown, review
+
+    cfg = load_config()
+    text = str(params.get("text") or "")
+    if not text.strip():
+        raise ValueError("没有内容可审")
+
+    outcome = review(
+        text,
+        str(params.get("platform") or "xiaohongshu"),
+        cfg,
+        use_ai=str(params.get("use_ai", "1")) not in ("0", "false", "no"),
+    )
+    payload = outcome.as_dict()
+    payload["markdown"] = render_markdown(outcome)
+    return payload
+
+
 def do_trends_meta() -> dict[str, Any]:
     from ..trends import CATEGORIES, SOURCES
 
@@ -683,6 +749,14 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/orchestrate":
                 self._json(do_orchestrate(payload))
+                return
+
+            if route == "/api/write":
+                self._json(do_write(payload))
+                return
+
+            if route == "/api/review":
+                self._json(do_review(payload))
                 return
 
             self._json({"error": "not found"}, 404)
