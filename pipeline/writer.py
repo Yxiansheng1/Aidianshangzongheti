@@ -26,7 +26,7 @@ SCHEMA = """{
   "title": "标题",
   "body": "正文",
   "tags": ["标签1", "标签2"],
-  "notes": "如果信息不足，写这里；没有就留空字符串"
+  "gaps": ["这篇里有哪些地方是我没有依据、靠推测写的"]
 }"""
 
 
@@ -121,11 +121,12 @@ def build_prompt(topic: str, platform: str, *, product: str = "", extra: str = "
         "- 不编造销量、评价、检测报告、用户反馈",
         "- 不用「家人们」「绝了」「谁懂啊」这种空洞流行语",
         "",
-        "**最重要的一条：**",
-        "如果你发现这个主题跟给到的商品/经历之间没有可写的具体关联，"
-        "**不要硬凑**。直接返回 title 和 body 都为空字符串，"
-        "在 notes 里写清缺什么（例如：这个主题跟商品无关，需要一个具体的使用场景）。",
-        "宁可交白卷，也不要写一篇谁都不想看的空话。",
+        "**必须照写，不要交白卷。**",
+        "如果主题跟你手上的材料对不上、或者有些细节你不确定：",
+        "- 照样写出一篇完整的稿子",
+        "- 但把推测的部分写得克制，别编造具体数字、日期、品牌事件",
+        "- 在 gaps 字段里逐条列出「这篇里哪些地方我没有依据」",
+        "不要因为缺材料就拒绝，也不要为了凑数编造事实。写你能写的，标出你虚的地方。",
         "",
         "按这个 JSON 输出：",
         SCHEMA,
@@ -155,6 +156,12 @@ def write(
         raise ValueError("主题不能为空")
 
     style = PLATFORMS[platform]
+    # 没指定商品时，用账号定位里的商品当背景（只是背景信息，不影响写什么主题）
+    if not product:
+        brand = getattr(cfg, "brand", None)
+        if brand and brand.product.strip():
+            product = brand.product
+
     client = OpenAICompatible(
         base_url=cfg.model.base_url,
         api_key=cfg.model.api_key,
@@ -183,17 +190,21 @@ def write(
     title = str(data.get("title") or "").strip()
     body = str(data.get("body") or "").strip()
     notes = str(data.get("notes") or "").strip()
+    gaps = [str(g).strip() for g in (data.get("gaps") or []) if str(g).strip()]
 
     if not title or not body:
         raise ModelError(
-            "模型判断这个主题写不出东西，拒绝硬凑。\n"
-            f"它给的理由：{notes or '（没说明）'}\n\n"
-            "换一个角度：给一个具体的经历、场景或商品细节，再试。"
+            "模型这次什么都没写出来。\n"
+            f"它说：{notes or '（没说明）'}\n\n"
+            "再跑一次，或者给一点更具体的信息。"
         )
 
     tags = [str(t).strip().lstrip("#") for t in (data.get("tags") or []) if str(t).strip()]
 
     warnings: list[str] = []
+    if gaps:
+        warnings.append("这篇里有 %d 处没有依据，建议核实：" % len(gaps))
+        warnings.extend(gaps)
     if len(title) > style.title_max:
         title = title[: style.title_max]
         warnings.append(f"标题超过 {style.title_max} 字，已截断")

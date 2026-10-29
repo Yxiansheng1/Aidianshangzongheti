@@ -56,6 +56,16 @@ class LocalConfig:
 
 
 @dataclass
+class BrandConfig:
+    """账号定位。写作和选题都要先过这一关。"""
+
+    product: str = ""
+    audience: str = ""
+    directions: list[str] = field(default_factory=list)
+    tone: str = ""
+
+
+@dataclass
 class TrendsConfig:
     """热点抓取。国外源要代理，国内源直连。"""
 
@@ -68,6 +78,7 @@ class AppConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
     trends: TrendsConfig = field(default_factory=TrendsConfig)
+    brand: BrandConfig = field(default_factory=BrandConfig)
     mxpage_output_dir: str = ""
     sau_cmd: str = "sau"
     sau_cwd: str = ""
@@ -107,6 +118,14 @@ def load_config(path: Path | str | None = None) -> AppConfig:
     cfg.trends = TrendsConfig(
         proxy=raw_trends.get("proxy", cfg.trends.proxy),
         keywords=list(raw_trends.get("keywords") or []),
+    )
+
+    raw_brand = data.get("brand", {})
+    cfg.brand = BrandConfig(
+        product=raw_brand.get("product", ""),
+        audience=raw_brand.get("audience", ""),
+        directions=list(raw_brand.get("directions") or []),
+        tone=raw_brand.get("tone", ""),
     )
 
     cfg.mxpage_output_dir = data.get("mxpage", {}).get("output_dir", "")
