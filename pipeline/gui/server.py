@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import subprocess
+import sys
 import time
 import traceback
 import urllib.parse
@@ -663,8 +664,16 @@ def do_content_pub(params: dict[str, Any]) -> dict[str, Any]:
 
 def do_content_meta() -> dict[str, Any]:
     from ..content.rewrite import list_skills
+    from ..content import publish as pub
 
-    return {"skills": list_skills(), "default": "小红书"}
+    skills = list_skills()
+    return {
+        "skills": skills,
+        "default": "小红书",
+        # 每个平台能发什么形态，界面据此决定显示哪些按钮
+        "publish": {name: pub.kinds(name) for name in skills},
+        "no_publish": {k: v for k, v in pub.NO_PUBLISH_REASON.items() if k in skills},
+    }
 
 
 def start_content(params: dict[str, Any]) -> dict[str, Any]:
@@ -1241,6 +1250,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 8899, open_browser: bool = False) -> None:
+    # 控制台不是 UTF-8 时（例如从别的终端拉起），print 中文会直接抛
+    # UnicodeEncodeError 把服务带崩。这里先兜住。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

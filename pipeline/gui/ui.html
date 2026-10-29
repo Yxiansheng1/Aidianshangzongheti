@@ -506,14 +506,22 @@
   /* ---------------- 写作台（项目B） ---------------- */
   var wJobs = {};
   var lastContent = null;
+  var writerMeta = null;
 
   function loadWriterMeta(){
     fetch("/api/content/meta").then(function(r){ return r.json(); }).then(function(d){
+      writerMeta = d;
       var sel = $("w-platform");
       sel.innerHTML = (d.skills || []).map(function(s){
         return '<option value="' + esc(s) + '"' + (s === d.default ? " selected" : "") + '>' + esc(s) + '</option>';
       }).join("") || '<option>小红书</option>';
     }).catch(function(){});
+  }
+
+  /* 每个平台能发什么，由后端 /api/content/meta 给，界面不写死 */
+  function platformsWith(kind){
+    var map = (writerMeta || {}).publish || {};
+    return Object.keys(map).filter(function(k){ return (map[k] || []).indexOf(kind) >= 0; });
   }
 
   function pollWriterJob(jobId){
@@ -578,14 +586,40 @@
       h += '</div></div>';
     }
 
+    var plat = draft.platform || "小红书";
+    var notePubs = platformsWith("note");
+    notePubs.sort(function(a, b){ return (b === plat) - (a === plat); });
+
     h += '<div class="row" style="margin-top:18px;gap:8px;flex-wrap:wrap">';
     if((d.images || []).length){
-      h += '<button class="btn" data-w="video">生成视频</button>';
+      h += '<button class="btn" data-w="video">' + (d.videoPath ? "重新拼视频" : "生成视频") + '</button>';
     }
-    h += '<button class="btn" data-w="pub" data-platform="小红书">发布到小红书</button>';
-    h += '<button class="btn" data-w="pub" data-platform="百家号">发布到百家号</button>';
-    h += '<button class="btn" data-w="cmd" data-platform="小红书">看发布命令</button>';
+    notePubs.forEach(function(p){
+      h += '<button class="btn" data-w="pub" data-platform="' + esc(p) + '">发布到' + esc(p) + '</button>';
+    });
+    h += '<button class="btn" data-w="cmd" data-platform="' + esc(plat) + '">看发布命令</button>';
     h += '</div>';
+
+    if(d.videoPath){
+      var vi = d.videoInfo || {};
+      h += '<div style="margin-top:12px"><div class="muted" style="font-weight:600;margin-bottom:6px">视频（发视频的平台用这个）' +
+        (vi.duration ? '　' + vi.duration + ' 秒　' + vi.width + '×' + vi.height + '　' + vi.size_mb + ' MB' : '') + '</div>' +
+        '<video controls src="' + d.videoUrl + '" style="max-width:280px;border-radius:8px;border:1px solid var(--line)"></video></div>';
+      h += '<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">' +
+        platformsWith("video").map(function(p){
+          return '<button class="btn small" data-w="pub" data-platform="' + esc(p) + '">发到' + esc(p) + '</button>';
+        }).join("") + '</div>';
+    }else{
+      var vo = platformsWith("video").filter(function(p){ return notePubs.indexOf(p) < 0; });
+      var tips = [];
+      if(vo.length) tips.push("只能发视频：" + vo.join("、") + "（拼完视频后这里出现按钮）");
+      var noPub = (writerMeta || {}).no_publish || {};
+      Object.keys(noPub).forEach(function(k){ tips.push(k + "：" + noPub[k]); });
+      if(tips.length){
+        h += '<div class="muted" style="margin-top:10px;font-size:12px">' + tips.map(esc).join("<br>") + '</div>';
+      }
+    }
+
     h += '<div id="w-extra" style="margin-top:14px"></div>';
 
     if(d.dir){
@@ -595,7 +629,6 @@
     $("w-result").className = "";
     $("w-result").innerHTML = h;
     lastContent = d;
-    var videoPath = "";
 
     Array.prototype.forEach.call($("w-result").querySelectorAll("[data-w]"), function(btn){
       btn.addEventListener("click", function(){
@@ -613,12 +646,11 @@
               dir: d.dir || ""
             })
           }).then(function(r){ return r.json(); }).then(function(res){
-            btn.disabled = false;
             if(res.error) throw new Error(res.error);
-            videoPath = res.path;
-            extra.innerHTML = '<div class="muted" style="margin-bottom:8px">视频：' + res.info.duration +
-              ' 秒　' + res.info.width + '×' + res.info.height + '　' + res.info.size_mb + ' MB</div>' +
-              '<video controls src="' + res.url + '" style="max-width:280px;border-radius:8px;border:1px solid var(--line)"></video>';
+            d.videoPath = res.path;
+            d.videoUrl = res.url;
+            d.videoInfo = res.info;
+            renderWriter(d);
           }).catch(function(e){
             btn.disabled = false;
             extra.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
@@ -632,7 +664,7 @@
           body: (d.draft || {}).body || "",
           tags: (d.draft || {}).tags || [],
           images: (d.images || []).map(function(x){ return x.path; }),
-          video: videoPath,
+          video: d.videoPath || "",
           execute: kind === "pub"
         };
         if(kind === "pub" && !confirm("真的发到「" + platform + "」？会打开浏览器自动发布。")) return;

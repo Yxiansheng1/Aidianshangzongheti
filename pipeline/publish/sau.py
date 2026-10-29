@@ -39,6 +39,8 @@ class PlatformSpec:
     note_style: str = "images"      # images = --note 内联；article = --content-file 外部文件
     # 视频的额外必填项
     video_style: str = "simple"     # simple = 只要 file/title/desc；zhihu = 还要 category/originality
+    needs_tid: bool = False         # bilibili 必须给分区 id
+    headed_ok: bool = True          # bilibili 的 upload-video 没有 --headed 参数
     tag_limit: int | None = None
     title_max: int | None = None
     video_title_min: int | None = None
@@ -60,9 +62,9 @@ PLATFORMS: dict[str, PlatformSpec] = {
         video_title_max=50,
         video_desc_max=300,
     ),
-    "bilibili": PlatformSpec(None, "upload-video"),
+    "bilibili": PlatformSpec(None, "upload-video", needs_tid=True, headed_ok=False),
     "tencent": PlatformSpec(None, "upload-video"),
-    "weibo": PlatformSpec(None, "upload-video"),
+    "weibo": PlatformSpec(None, "upload-video", video_title_max=30),
     "baijiahao": PlatformSpec(None, "upload-video"),
     "dayu": PlatformSpec(None, "upload-video"),
     "hupu": PlatformSpec(None, "upload-video"),
@@ -162,6 +164,7 @@ def build_plan(
     schedule: str | None = None,
     headed: bool = False,
     zhihu_category: str = "家居生活",
+    bilibili_tid: str = "188",
     extra: list[str] | None = None,
 ) -> PublishPlan:
     """构造一条发布命令。kind: "note"（图文/长文）或 "video"。"""
@@ -219,7 +222,15 @@ def build_plan(
                 "--originality", "original",
             ]
         else:
-            argv += ["--title", title, "--desc", body]
+            desc = body[: spec.video_desc_max] if spec.video_desc_max else body
+            argv += [
+                "--title", _fit_video_title(title, spec, warnings),
+                "--desc", desc,
+            ]
+            if spec.needs_tid:
+                # B站分区必填，188 = 科技
+                argv += ["--tid", str(bilibili_tid)]
+                artifacts.append(f"B站分区 tid={bilibili_tid}（188 科技 / 208 财经 / 201 生活，按内容改）")
 
     if tags:
         if spec.tag_limit and len(tags) > spec.tag_limit:
@@ -232,7 +243,7 @@ def build_plan(
     if schedule:
         argv += ["--schedule", schedule]
 
-    if headed:
+    if headed and spec.headed_ok:
         argv.append("--headed")
 
     if extra:

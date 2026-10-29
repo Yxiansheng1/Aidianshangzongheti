@@ -268,6 +268,34 @@ SOURCE_BLOCK = """原文（改写依据，逐条比对）：
 """
 
 
+def _loads_loose(text: str) -> dict:
+    """读模型返回的 JSON，截断了就尽量救回来。
+
+    中转站偶发把长输出截断，一次核查格式异常不该让整篇稿子判不过。
+    """
+    body = _strip_fence(text)
+    try:
+        data = json.loads(body)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+
+    fixed = body.rstrip()
+    if fixed.count('"') % 2 == 1:
+        fixed += '"'
+    opens = fixed.count("{") - fixed.count("}")
+    if opens > 0:
+        fixed += "]" * max(0, fixed.count("[") - fixed.count("]")) + "}" * opens
+    try:
+        data = json.loads(fixed)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
 def extract_claims(text: str, cfg: Any) -> list[str]:
     client = OpenAICompatible(
         base_url=cfg.model.base_url,
@@ -279,11 +307,7 @@ def extract_claims(text: str, cfg: Any) -> list[str]:
         CLAIM_PROMPT.format(text=text[:4000], schema=CLAIM_SCHEMA),
         system=SYSTEM, max_tokens=1500, temperature=0.2,
     )
-    body = _strip_fence(raw)
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        return []
+    data = _loads_loose(raw)
 
     claims = [str(c).strip() for c in (data.get("claims") or []) if str(c).strip()]
     return claims[:10]
@@ -307,18 +331,20 @@ def check_claims(claims: list[str], platform: str, cfg: Any, *, source_text: str
     else:
         source_block = "（没有提供原文，只能凭常识判断。具体数字要格外严格。）"
 
-    raw = client.ask(
-        CLAIM_CHECK_PROMPT.format(
-            platform=platform, claims=listed,
-            source_block=source_block, schema=CLAIM_CHECK_SCHEMA,
-        ),
-        system=SYSTEM, max_tokens=2500, temperature=0.2,
+    prompt = CLAIM_CHECK_PROMPT.format(
+        platform=platform, claims=listed,
+        source_block=source_block, schema=CLAIM_CHECK_SCHEMA,
     )
-    body = _strip_fence(raw)
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        return [Issue(level="warn", kind="核查失败", text="", advice="断言核查返回格式异常，建议人工复核")]
+    data = _loads_loose(client.ask(prompt, system=SYSTEM, max_tokens=2500, temperature=0.2))
+    if not data.get("results"):
+        # 截断或格式坏过一次，重问一次；两次都不行才当「没核查上」
+        data = _loads_loose(client.ask(
+            prompt + "\n\n上次输出无法解析。这次只输出完整的 JSON，不要解释，不要省略。",
+            system=SYSTEM, max_tokens=3000, temperature=0.2,
+        ))
+    if not data.get("results"):
+        return [Issue(level="warn", kind="核查失败", text="",
+                      advice="断言核查两次都没返回可用结果，建议人工复核")]
 
     issues: list[Issue] = []
     for item in data.get("results") or []:

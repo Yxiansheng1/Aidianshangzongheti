@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -78,4 +80,37 @@ class OpenAICompatible:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        return self.chat(self.text_model, messages, **kwargs)
+
+    def ask_image(self, prompt: str, image: str | Path, system: str = "", **kwargs: Any) -> str:
+        """带一张图问一句话（视觉核对用）。
+
+        图片以 data URL 内联发送；超过 6 MB 的图不发，直接报错——
+        中转站对超大请求体不稳（实测 7 MB 请求体会在 TLS 上传阶段断连）。
+        """
+        if not self.text_model:
+            raise ModelError("config.toml 里没有配置 model.text_model")
+
+        path = Path(image)
+        if not path.is_file():
+            raise ModelError(f"图不存在：{path}")
+
+        raw = path.read_bytes()
+        if len(raw) > 6 * 1024 * 1024:
+            raise ModelError(f"图片太大（{len(raw) / 1e6:.1f} MB），不发")
+
+        suffix = path.suffix.lower().lstrip(".") or "png"
+        mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}.get(suffix, "png")
+        data_url = f"data:image/{mime};base64,{base64.b64encode(raw).decode()}"
+
+        messages: list[dict[str, Any]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ],
+        })
         return self.chat(self.text_model, messages, **kwargs)

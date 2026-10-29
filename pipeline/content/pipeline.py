@@ -92,13 +92,26 @@ def run(
     # ④ 配图
     if draw:
         try:
-            scenes = vs.plan(draft["title"], draft["body"], cfg, n=images)
-            files = vs.render(scenes, cfg, folder, prefix="img")
+            scenes = vs.plan(draft["title"], draft["body"], cfg, n=images, platform=platform)
+            vs.render(scenes, cfg, folder, prefix="img")
+
+            # 核对：图里到底有没有那个主体；对不上的重写提示词，重出到同一个文件名
+            verdicts = vs.check(scenes, cfg)
+            retry = vs.revise(scenes, verdicts, cfg)
+            for index, new_prompt in retry.items():
+                scene = scenes[index - 1]
+                scene["prompt"] = new_prompt
+                vs.render_into(scene, scene["file"], cfg, seed=7000 + index * 1000)
+            if retry:
+                verdicts = vs.check(scenes, cfg)
+
             result["steps"]["visual"] = {
                 "ok": True,
-                "count": len(files),
-                "files": [str(f) for f in files],
+                "count": len(scenes),
+                "files": [s["file"] for s in scenes],
                 "scenes": scenes,
+                "checks": verdicts,
+                "retried": sorted(retry),
             }
         except Exception as exc:  # noqa: BLE001
             result["steps"]["visual"] = {"ok": False, "reason": str(exc)}
