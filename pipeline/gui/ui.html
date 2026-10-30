@@ -201,6 +201,8 @@
       <div class="row" style="gap:10px;margin-bottom:10px">
         <span class="muted" style="font-size:12.5px">人设</span>
         <select id="w-persona" style="width:190px"></select>
+        <span class="muted" style="font-size:12.5px;margin-left:8px">题材</span>
+        <select id="w-mode" style="width:150px"></select>
         <span class="muted" id="w-persona-hint" style="font-size:12px"></span>
       </div>
 
@@ -528,6 +530,13 @@
       sel.innerHTML = (d.skills || []).map(function(s){
         return '<option value="' + esc(s) + '"' + (s === d.default ? " selected" : "") + '>' + esc(s) + '</option>';
       }).join("") || '<option>小红书</option>';
+
+      var msel = $("w-mode");
+      if(msel){
+        msel.innerHTML = '<option value="">（不限定）</option>' + (d.modes || []).map(function(m){
+          return '<option value="' + esc(m) + '">' + esc(m) + '</option>';
+        }).join("");
+      }
       loadPersonas();
     }).catch(function(){});
   }
@@ -827,6 +836,7 @@
       body: JSON.stringify({
         url: url, text: text, title: $("w-title").value.trim(),
         platform: $("w-platform").value,
+        mode: ($("w-mode") || {}).value || "",
         images: imgs, draw: imgs > 0
       })
     }).then(function(r){ return r.json(); }).then(function(d){

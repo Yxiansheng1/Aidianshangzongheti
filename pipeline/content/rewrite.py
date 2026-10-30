@@ -15,6 +15,7 @@ from typing import Any
 from ..model.client import ModelError, OpenAICompatible
 
 SKILL_DIR = Path(__file__).parent / "skills"
+MODE_DIR = Path(__file__).parent / "modes"
 DEFAULT_SKILL = "小红书"
 
 # 账号人设。存在就追加到每份 skill 后面：平台决定「怎么写」，人设决定「谁在写」。
@@ -225,6 +226,36 @@ def persona_block() -> str:
     )
 
 
+def list_modes() -> list[str]:
+    if not MODE_DIR.is_dir():
+        return []
+    return sorted(p.stem for p in MODE_DIR.glob("*.md"))
+
+
+def load_mode(name: str) -> str:
+    if not name:
+        return ""
+    path = MODE_DIR / f"{name}.md"
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8").strip()
+
+
+def mode_block(mode: str) -> str:
+    """题材规则（政策解读 / 国际军事 / 历史）。
+
+    平台决定格式，题材决定边界。题材写的是「能写什么、不能写什么」，
+    优先级高于平台的结构建议——但字数和格式仍听平台的。
+    """
+    text = load_mode(mode)
+    if not text:
+        return ""
+    return (
+        "\n\n---\n\n## 附：本篇的题材规则（优先级高于上面的平台结构）\n\n"
+        "格式和字数听平台的，**能写什么、不能写什么听这段**。\n\n" + text + "\n"
+    )
+
+
 def _strip_fence(text: str) -> str:
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
     return (fenced.group(1) if fenced else text).strip()
@@ -387,6 +418,7 @@ def rewrite(
     cfg: Any,
     *,
     platform: str = DEFAULT_SKILL,
+    mode: str = "",
     extra: str = "",
 ) -> dict[str, Any]:
     if not cfg.has_model:
@@ -395,7 +427,7 @@ def rewrite(
     if not topic.strip():
         raise ValueError("主题不能为空")
 
-    system = load_skill(platform) + persona_block() + SHARED_RULES
+    system = load_skill(platform) + mode_block(mode) + persona_block() + SHARED_RULES
 
     client = OpenAICompatible(
         base_url=cfg.model.base_url,

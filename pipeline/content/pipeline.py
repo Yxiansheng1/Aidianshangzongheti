@@ -24,12 +24,14 @@ def run(
     cfg: Any,
     *,
     platform: str = "小红书",
+    mode: str = "",
     images: int = 2,
     draw: bool = True,
     article: dict | None = None,
 ) -> dict[str, Any]:
     """跑完整流程。
 
+    platform 决定格式（小红书/头条/…），mode 决定题材边界（政策解读/国际军事/历史）。
     article 可以直接传 {"title": ..., "text": ...} 跳过抓取（给粘贴内容用）。
     """
     from . import rewrite as rw
@@ -38,6 +40,7 @@ def run(
     result: dict[str, Any] = {
         "url": url,
         "platform": platform,
+        "mode": mode,
         "started": datetime.now().isoformat(timespec="seconds"),
         "steps": {},
     }
@@ -64,7 +67,7 @@ def run(
 
     # ② 改写
     try:
-        draft = rw.rewrite(title, text, cfg, platform=platform)
+        draft = rw.rewrite(title, text, cfg, platform=platform, mode=mode)
         result["steps"]["rewrite"] = {"ok": True, "title": draft["title"], "length": draft["length"]}
     except Exception as exc:  # noqa: BLE001
         result["steps"]["rewrite"] = {"ok": False, "reason": str(exc)}
@@ -79,7 +82,8 @@ def run(
 
     # ③ 审核
     try:
-        checked = review(f"{draft['title']}\n\n{draft['body']}", platform, cfg, source_text=text)
+        checked = review(f"{draft['title']}\n\n{draft['body']}", platform, cfg,
+                         source_text=text, mode=mode)
         result["steps"]["review"] = {
             "ok": True,
             "passed": checked.passed,

@@ -792,7 +792,7 @@ def do_content_persona_set(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def do_content_meta() -> dict[str, Any]:
-    from ..content.rewrite import list_skills
+    from ..content.rewrite import list_modes, list_skills
     from ..content import publish as pub
 
     skills = list_skills()
@@ -806,6 +806,7 @@ def do_content_meta() -> dict[str, Any]:
         "skills": skills,
         "default": "小红书",
         "persona": persona,
+        "modes": list_modes(),
         # 每个平台能发什么形态，界面据此决定显示哪些按钮
         "publish": {name: pub.kinds(name) for name in skills},
         "no_publish": {k: v for k, v in pub.NO_PUBLISH_REASON.items() if k in skills},
@@ -823,6 +824,7 @@ def start_content(params: dict[str, Any]) -> dict[str, Any]:
     raw_text = str(params.get("text") or "").strip()
     title = str(params.get("title") or "").strip()
     platform = str(params.get("platform") or "小红书")
+    mode = str(params.get("mode") or "")
     images = int(params.get("images") or 2)
 
     if not url and not raw_text and not title:
@@ -841,7 +843,7 @@ def start_content(params: dict[str, Any]) -> dict[str, Any]:
     def work(job):
         job.message = "抓原文中…" if (url and not raw_text) else "写作中…"
         result = content_pipeline.run(
-            url, cfg, platform=platform, images=images,
+            url, cfg, platform=platform, mode=mode, images=images,
             draw=bool(params.get("draw", True)), article=article,
         )
 

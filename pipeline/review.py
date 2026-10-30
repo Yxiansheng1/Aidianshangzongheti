@@ -429,8 +429,67 @@ def ai_check(text: str, platform: str, cfg: Any) -> tuple[list[Issue], int, str]
 # --------------------------------------------------------------- 主流程
 
 
+POLICY_PROMPT = """你是政策审校。逐条核对下面这段「政策解读」有没有把原文写歪。
+
+只查四件事，别的不查：
+1. **数字**：有没有被放大、折算错（月→年、含不含补贴、税前税后）
+2. **限定条件**：原文里的「参加XX的 / 仅限 / 最高 / 不超过 / 年满」是不是还在
+   —— 漏掉限定条件是最常见的误导，重点查这个
+3. **因果**：原文说「A 的同时出现了 B」，不能写成「A 导致 B」
+4. **无中生有**：有没有把原文没说的内容写成事实
+
+原文：
+\"\"\"
+{source}
+\"\"\"
+
+解读：
+\"\"\"
+{text}
+\"\"\"
+
+按这个 JSON 输出：
+{{"problems": [{{"quote": "解读里的原句", "problem": "属于上面哪一类", "fix": "怎么改"}}]}}
+
+没问题就返回 {{"problems": []}}。
+"""
+
+
+def check_policy(text: str, cfg: Any, *, source_text: str = "") -> list[Issue]:
+    """政策解读专用：口径核对 + 限定条件检查。
+
+    这一层不判文风、不判禁词（那是别的层干的），只查「有没有把政策说歪」。
+    """
+    if not source_text.strip():
+        return [Issue(level="block", kind="政策·无原文",
+                      text="", advice="政策解读必须带原文出处；没有原文无法核对口径，先补原文再写")]
+
+    client = OpenAICompatible(
+        base_url=cfg.model.base_url,
+        api_key=cfg.model.api_key,
+        timeout=max(cfg.model.timeout, 150),
+        text_model=cfg.model.text_model,
+    )
+    prompt = POLICY_PROMPT.format(source=source_text[:12000], text=text[:6000])
+    data = _loads_loose(client.ask(prompt, system=SYSTEM, max_tokens=2500, temperature=0))
+    if not data.get("problems"):
+        return []
+
+    issues: list[Issue] = []
+    for item in data.get("problems") or []:
+        if not isinstance(item, dict):
+            continue
+        issues.append(Issue(
+            level="block",
+            kind="政策·口径",
+            text=str(item.get("quote") or "")[:80],
+            advice=f"{item.get('problem', '')}；{item.get('fix', '')}"[:120],
+        ))
+    return issues
+
+
 def review(text: str, platform: str, cfg: Any, *, use_ai: bool = True,
-           source_text: str = "") -> ReviewResult:
+           source_text: str = "", mode: str = "") -> ReviewResult:
     """规则层 + 断言级核查。
 
     断言级是主力：先把文稿拆成可核查的事实性表述，逐条判「属实/存疑/无法证实/夸大」。
@@ -447,6 +506,8 @@ def review(text: str, platform: str, cfg: Any, *, use_ai: bool = True,
             claims = extract_claims(text, cfg)
             result.claims_checked = len(claims)
             result.issues.extend(check_claims(claims, platform, cfg, source_text=source_text))
+            if mode == "政策解读":
+                result.issues.extend(check_policy(text, cfg, source_text=source_text))
             result.ai_used = True
         except ModelError as exc:
             result.summary = f"AI 核查不可用（{str(exc)[:60]}），仅规则层结果"
