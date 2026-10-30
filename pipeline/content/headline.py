@@ -30,10 +30,31 @@ from typing import Any
 from ..config import ROOT
 
 STATE_DIR = ROOT / "output" / "_state"
-STATE_FILE = STATE_DIR / "toutiao.json"
 LOG_FILE = STATE_DIR / "headline.log"
 EDITOR_URL = "https://mp.toutiao.com/profile_v4/graphic/publish"
 HOME_URL = "https://mp.toutiao.com/profile_v4/index"
+
+
+def state_file(account: str = "main") -> Path:
+    """每个头条账号一份登录态，互不覆盖。
+
+    账号名只允许字母数字下划线，避免拼出奇怪的路径。
+    """
+    safe = "".join(ch for ch in (account or "main") if ch.isalnum() or ch in "-_") or "main"
+    return STATE_DIR / f"toutiao-{safe}.json"
+
+
+# 旧版本只存过一份 toutiao.json，第一次跑多账号时把它迁成 main
+def _migrate_legacy() -> None:
+    legacy = STATE_DIR / "toutiao.json"
+    target = state_file("main")
+    if legacy.is_file() and not target.is_file():
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        legacy.replace(target)
+        _say(f"[迁移] 旧登录态 → {target.name}")
+
+
+ACCOUNT = "main"
 
 TITLE_SELECTORS = [
     'input[placeholder*="标题"]',
@@ -63,7 +84,7 @@ def _say(msg: str) -> None:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         with LOG_FILE.open("a", encoding="utf-8") as fh:
-            fh.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+            fh.write(f"[{time.strftime('%H:%M:%S')}][{ACCOUNT}] {msg}\n")
     except OSError:
         pass
 
@@ -132,9 +153,10 @@ def _open(playwright, *, state_file: Path | None):
 
 
 def _save_state(context) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    context.storage_state(path=str(STATE_FILE))
-    _say(f"[状态] 登录态已保存：{STATE_FILE}")
+    target = state_file(ACCOUNT)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    context.storage_state(path=str(target))
+    _say(f"[状态] 登录态已保存（账号 {ACCOUNT}）：{target.name}")
 
 
 def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
@@ -168,13 +190,24 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
     raise SystemExit("等登录超时，退出。重新跑一次 login 即可。")
 
 
-def login() -> None:
+def login(account: str = "main") -> None:
+    global ACCOUNT
+    ACCOUNT = account
+    _migrate_legacy()
+    target = state_file(ACCOUNT)
+    if target.is_file():
+        # 已有登录态时，先备份再重登：扫码的是另一个号时，别把原来那份冲掉
+        backup = target.with_suffix(f".{time.strftime('%Y%m%d-%H%M%S')}.bak.json")
+        target.replace(backup)
+        _say(f"[备份] 旧的登录态 → {backup.name}")
+
     sync_playwright = _require_patchright()
     with sync_playwright() as p:
         browser, context, page = _open(p, state_file=None)
         page.goto(HOME_URL, wait_until="domcontentloaded")
         _say("=" * 60)
-        _say(" 浏览器已打开。请扫码登录头条号，登录后这个窗口会自动关掉。")
+        _say(f" 浏览器已打开（账号 {ACCOUNT}）。请扫码登录这个头条号，")
+        _say(" 登录后窗口会自动关掉。想登另一个号，用 --account 换个名字再跑一次。")
         _say("=" * 60)
 
         deadline = time.time() + 300
@@ -258,7 +291,11 @@ def _upload_images(page, images: list[str]) -> tuple[int, str]:
     return 0, "页面上没找到上传入口"
 
 
-def fill(draft_path: str) -> None:
+def fill(draft_path: str, account: str = "main") -> None:
+    global ACCOUNT
+    ACCOUNT = account
+    _migrate_legacy()
+
     data = json.loads(Path(draft_path).read_text(encoding="utf-8"))
     title = str(data.get("title") or "").strip()
     body = str(data.get("body") or "").strip()
@@ -270,7 +307,7 @@ def fill(draft_path: str) -> None:
 
     sync_playwright = _require_patchright()
     with sync_playwright() as p:
-        browser, context, page = _open(p, state_file=STATE_FILE)
+        browser, context, page = _open(p, state_file=state_file(ACCOUNT))
         _wait_login(page, context, EDITOR_URL)
 
         # 有的页面不跳登录页，而是在发布页上挂一个登录弹层
@@ -324,15 +361,19 @@ def fill(draft_path: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="headline", description="头条号半自动发布（工具填稿，人点发布）")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("login", help="扫码登录并保存登录态")
+
+    p_login = sub.add_parser("login", help="扫码登录并保存登录态")
+    p_login.add_argument("--account", default="main", help="账号标识，例如 main / second")
+
     p_fill = sub.add_parser("fill", help="把草稿填进头条编辑器")
     p_fill.add_argument("--draft", required=True, help="草稿 JSON 路径")
+    p_fill.add_argument("--account", default="main", help="账号标识，例如 main / second")
 
     args = parser.parse_args(argv)
     if args.cmd == "login":
-        login()
+        login(args.account)
     else:
-        fill(args.draft)
+        fill(args.draft, args.account)
     return 0
 
 

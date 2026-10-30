@@ -13,6 +13,7 @@ import html as html_mod
 import re
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,7 +46,10 @@ class Article:
 
 
 def _get(url: str, proxy: str | None, timeout: int = 25) -> bytes:
-    request = urllib.request.Request(url, headers={
+    # 中文路径（例如维基的「枸杞子」）直接塞进 Request 会在编码阶段就炸：
+    # 'ascii' codec can't encode characters。先按 URL 规则转义，再发。
+    safe_url = urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%")
+    request = urllib.request.Request(safe_url, headers={
         "User-Agent": UA,
         "Accept": "text/html,application/xhtml+xml",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",

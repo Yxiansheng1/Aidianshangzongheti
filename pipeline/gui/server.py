@@ -677,10 +677,13 @@ def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
 
     cfg = load_config()
     action = str(params.get("action") or "fill")
+    account = "".join(ch for ch in str(params.get("account") or "main") if ch.isalnum() or ch in "-_") or "main"
+    label = str(params.get("label") or account)
 
     if action == "login":
-        args = [_sau_python(cfg), "-m", "pipeline.content.headline", "login"]
-        message = "已打开浏览器，扫码登录头条号；登录后窗口自动关闭，下次填稿不用再扫。"
+        args = [_sau_python(cfg), "-m", "pipeline.content.headline",
+                "login", "--account", account]
+        message = f"已打开浏览器（{label}），扫码登录这个头条号；登录后窗口自动关闭，下次填稿不用再扫。"
     else:
         title = str(params.get("title") or "").strip()
         body = str(params.get("body") or "").strip()
@@ -688,7 +691,7 @@ def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("没有标题或正文，先生成一篇")
 
         headline.STATE_DIR.mkdir(parents=True, exist_ok=True)
-        draft_path = headline.STATE_DIR / "toutiao-draft.json"
+        draft_path = headline.STATE_DIR / f"toutiao-draft-{account}.json"
         draft_path.write_text(json.dumps({
             "title": title,
             "body": body,
@@ -697,12 +700,12 @@ def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
         }, ensure_ascii=False, indent=1), encoding="utf-8")
 
         args = [_sau_python(cfg), "-m", "pipeline.content.headline",
-                "fill", "--draft", str(draft_path)]
-        message = ("已开浏览器填稿。填完它会停下等你——检查、选封面、点发布，最后按回车关窗口。")
+                "fill", "--draft", str(draft_path), "--account", account]
+        message = (f"已在浏览器里填稿（{label}）。填完它会停下等你——检查、选封面、点发布，最后按回车关窗口。")
 
     flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
     subprocess.Popen(args, cwd=str(ROOT), creationflags=flags)
-    return {"started": True, "action": action, "message": message}
+    return {"started": True, "action": action, "account": account, "message": message}
 
 
 def _persona_dirs() -> list[Path]:

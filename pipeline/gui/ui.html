@@ -650,7 +650,12 @@
       h += '<button class="btn" data-w="pub" data-platform="' + esc(p) + '">发布到' + esc(p) + '</button>';
     });
     if(plat === "头条"){
-      h += '<button class="btn" data-w="headline">填进头条编辑器（你来点发布）</button>';
+      h += '<select id="w-acc" style="width:96px">' +
+        '<option value="main">账号1</option>' +
+        '<option value="second">账号2</option>' +
+        '</select>' +
+        '<button class="btn" data-w="headline">填进头条编辑器</button>' +
+        '<button class="btn small" data-w="login">登录这个号</button>';
     }
     h += '<button class="btn" data-w="cmd" data-platform="' + esc(plat) + '">看发布命令</button>';
     h += '</div>';
@@ -713,18 +718,24 @@
           return;
         }
 
-        if(kind === "headline"){
+        if(kind === "headline" || kind === "login"){
+          var accSel = $("w-acc");
+          var acc = accSel ? accSel.value : "main";
+          var accLabel = (accSel && accSel.selectedIndex >= 0) ? accSel.options[accSel.selectedIndex].text : acc;
           btn.disabled = true;
           extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>正在打开浏览器…</span></div>';
+
+          var body = kind === "login"
+            ? { action: "login", account: acc, label: accLabel }
+            : { action: "fill", account: acc, label: accLabel,
+                title: (d.draft || {}).title || "",
+                body: (d.draft || {}).body || "",
+                images: (d.images || []).map(function(x){ return x.path; }),
+                url: $("w-url").value.trim() };
+
           fetch("/api/content/headline", {
             method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({
-              action: "fill",
-              title: (d.draft || {}).title || "",
-              body: (d.draft || {}).body || "",
-              images: (d.images || []).map(function(x){ return x.path; }),
-              url: $("w-url").value.trim()
-            })
+            body: JSON.stringify(body)
           }).then(function(r){ return r.json(); }).then(function(res){
             btn.disabled = false;
             if(res.error) throw new Error(res.error);
