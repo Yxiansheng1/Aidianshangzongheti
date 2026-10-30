@@ -139,6 +139,21 @@ def _logged_in(page) -> bool:
         return False
 
 
+def _session_ok(page) -> bool:
+    """真正的登录判据：后台首页能不能进。
+
+    发布页对匿名用户也渲染编辑器，靠「有没有标题框」判登录会误判
+    （实测把未登录的账号存成了有效登录态）。首页必须登录才给看，这个可靠。
+    """
+    try:
+        page.goto(HOME_URL, wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2500)
+    except Exception:  # noqa: BLE001
+        return False
+    url = page.url or ""
+    return "auth" not in url and "/login" not in url
+
+
 def _open(playwright, *, state_file: Path | None):
     browser = _launch(playwright)
     context_kwargs: dict[str, Any] = {
@@ -167,9 +182,14 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
         _say(f"[页面] {page.title()[:40]} | {page.url[:90]}")
     except Exception:  # noqa: BLE001
         pass
+    # 编辑器页对匿名用户也会渲染，先看首页确认是真登录，再决定要不要等
     if _logged_in(page):
-        _save_state(context)
-        return
+        if _session_ok(page):
+            # 刚刚为核对跑到了首页，填稿前得回到编辑器
+            page.goto(page_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(1500)
+            _save_state(context)
+            return
 
     _say("")
     _say("=" * 60)
@@ -180,12 +200,18 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
     deadline = time.time() + minutes * 60
     while time.time() < deadline:
         page.wait_for_timeout(3000)
-        if _logged_in(page):
+        url = page.url or ""
+        if "auth" in url or "login" in url:
+            continue  # 还在登录页，继续等扫码
+        # 已经离开登录页 → 用后台首页确认一次，确认过才存
+        if _session_ok(page):
             _say("[状态] 登录成功，继续。")
             _save_state(context)
-            return
-        if "auth" not in page.url and "login" not in page.url:
             page.goto(page_url, wait_until="domcontentloaded")
+            page.wait_for_timeout(1500)
+            return
+        _say("[提示] 还是匿名状态（没真正登进去），请继续扫码…")
+        page.goto(page_url, wait_until="domcontentloaded")
 
     raise SystemExit("等登录超时，退出。重新跑一次 login 即可。")
 
@@ -213,14 +239,15 @@ def login(account: str = "main") -> None:
         deadline = time.time() + 300
         while time.time() < deadline:
             page.wait_for_timeout(3000)
-            if "auth" not in page.url and "login" not in page.url:
-                page.goto(EDITOR_URL, wait_until="domcontentloaded")
-                if _logged_in(page):
-                    _save_state(context)
-                    _say("[完成] 登录态已保存，下次填稿不用再扫码。")
-                    break
+            if "auth" in page.url or "login" in page.url:
+                continue  # 还在登录页
+            # 离开登录页不算数，得后台首页能进才存——否则会把匿名态存成"已登录"
+            if _session_ok(page):
+                _save_state(context)
+                _say("[完成] 登录态已保存，下次填稿不用再扫码。")
+                break
         else:
-            _say("[超时] 没等到登录，什么都没保存。")
+            _say("[超时] 没等到真登录，什么都没保存。")
         browser.close()
 
 
