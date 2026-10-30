@@ -154,13 +154,17 @@
         <span class="muted" id="tr-count"></span>
         <div class="spacer"></div>
         <label style="font-size:12.5px;display:flex;align-items:center;gap:5px">
-          加入队列时用
+          写作用平台
           <select id="tr-platform" style="width:110px">
-            <option value="xiaohongshu">小红书</option>
-            <option value="zhihu">知乎</option>
-            <option value="baijiahao">百家号</option>
-            <option value="dayu">大鱼号</option>
-            <option value="douyin">抖音口播</option>
+            <option value="小红书">小红书</option>
+            <option value="抖音">抖音</option>
+            <option value="知乎">知乎</option>
+            <option value="快手">快手</option>
+            <option value="微博">微博</option>
+            <option value="B站">B站</option>
+            <option value="视频号">视频号</option>
+            <option value="百家号">百家号</option>
+            <option value="头条">头条</option>
           </select>
         </label>
         <label style="font-size:12.5px;display:flex;align-items:center;gap:5px">
@@ -246,10 +250,13 @@
         <span class="muted" id="q-hint"></span>
       </div>
       <div class="hint">
+        <b>这是旧的队列（另一套写作引擎），只写小红书 / 头条 / 百家号口吻。</b><br>
+        现在的主流程是「<b>写作台</b>」：热点页签点「→ 写」会直接把主题填进写作台，出稿、出图、发布都在那儿。<br>
+        <span class="muted">这个页签留着看历史条目，新东西别在这里加。</span>
+      </div>
+      <div class="hint" style="margin-top:10px">
         <b>这个页签只管到「文案就绪」，不负责发布。</b><br>
-        「标记为已发布」只是改状态做记录，不会发到任何平台。真发布有两条路：<br>
-        ① n8n 的「内容生产流水线」把 <code>publish</code> 改成 yes<br>
-        ② 在命令行手动跑 sau（我会给你生成命令）
+        「标记为已发布」只是改状态做记录，不会发到任何平台。
       </div>
       <div class="status-line" id="q-status"></div>
       <div id="q-error"></div>
@@ -706,7 +713,8 @@
   $("w-go").addEventListener("click", function(){
     var url = $("w-url").value.trim();
     var text = $("w-text").value.trim();
-    if(!url && !text){ alert("给个链接，或者粘贴正文"); return; }
+    var title = $("w-title").value.trim();
+    if(!url && !text && !title){ alert("给个链接，粘贴正文，或者至少写个主题"); return; }
 
     $("w-error").innerHTML = "";
     $("w-go").disabled = true;
@@ -1149,24 +1157,39 @@
 
     Array.prototype.forEach.call($("tr-result").querySelectorAll("button[data-trend]"), function(btn){
       btn.addEventListener("click", function(){
-        var platform = $("tr-platform").value;
-        btn.disabled = true;
-        fetch("/api/queue/add", {
-          method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            topic: btn.dataset.trend,
-            platform: platform,
-            source_url: btn.dataset.url || ""
-          })
-        }).then(function(r){ return r.json(); }).then(function(d){
-          btn.disabled = false;
-          if(d.error) throw new Error(d.error);
-          btn.textContent = "已加入";
-          setStatus("tr-status", false, "已加入内容队列：" + d.item.id + "（去「内容」页签跑写+审）");
-        }).catch(function(e){
-          btn.disabled = false;
-          alert(e.message);
-        });
+        var platform = $("tr-platform").value || "小红书";
+        var title = btn.dataset.trend || "";
+        var url = btn.dataset.url || "";
+
+        // 百度热搜的 url 是「搜索结果页」不是文章，抓下来等于抓一堆链接。
+        // 这类当「没有原文链接」处理，让用户自己贴正文或贴文章链接。
+        var searchLike = /baidu\.com\/s\?|s\.weibo\.com|weibo\.com\/q\?|zhihu\.com\/search/i.test(url);
+        var usable = url && !searchLike;
+
+        // 直接填进写作台。以前是丢进「内容队列」（另一套写作引擎），
+        // 所以在写作台看不到，容易以为丢了。
+        var writerTab = document.querySelector('nav button[data-tab="writer"]');
+        if(writerTab) writerTab.click();
+
+        var sel = $("w-platform");
+        if(sel){
+          var hit = Array.prototype.filter.call(sel.options, function(o){ return o.value === platform; })[0];
+          if(hit) sel.value = platform;
+        }
+        $("w-title").value = title;
+        $("w-url").value = usable ? url : "";
+        $("w-text").value = "";
+        $("w-error").innerHTML = "";
+        $("w-result").className = "empty";
+        $("w-result").textContent = usable
+          ? "已填入主题和原文链接，点「开始生成」。"
+          : "已填入主题——这条没有可抓的原文（热搜只有搜索页），"
+            + "建议把文章正文粘到上面的「粘贴正文」，或者换一条「AI与科技 / 国际 / 财经」里有链接的。";
+        if($("w-go").focus) $("w-go").focus();
+        window.scrollTo(0, 0);
+
+        setStatus("tr-status", false,
+          (usable ? "已填入写作台：" : "已填入写作台（这条没有原文链接）：") + title.slice(0, 22));
       });
     });
   }

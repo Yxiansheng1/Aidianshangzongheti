@@ -685,21 +685,25 @@ def start_content(params: dict[str, Any]) -> dict[str, Any]:
 
     url = str(params.get("url") or "").strip()
     raw_text = str(params.get("text") or "").strip()
+    title = str(params.get("title") or "").strip()
     platform = str(params.get("platform") or "小红书")
     images = int(params.get("images") or 2)
 
-    if not url and not raw_text:
-        raise ValueError("给一个文章链接，或者直接粘贴正文")
+    if not url and not raw_text and not title:
+        raise ValueError("给一个文章链接，或者直接粘贴正文，或者至少给一个主题")
 
     article = None
     if raw_text:
         article = {
-            "title": str(params.get("title") or "未命名"),
+            "title": title or "未命名",
             "text": raw_text,
         }
+    elif not url and title:
+        # 只有主题、没有链接和正文：照样能写，但改写时会把「哪句没依据」标出来
+        article = {"title": title, "text": ""}
 
     def work(job):
-        job.message = "抓原文中…"
+        job.message = "抓原文中…" if (url and not raw_text) else "写作中…"
         result = content_pipeline.run(
             url, cfg, platform=platform, images=images,
             draw=bool(params.get("draw", True)), article=article,
