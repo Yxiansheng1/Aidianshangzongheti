@@ -747,10 +747,13 @@ def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _persona_dirs() -> list[Path]:
-    base = ROOT / "output" / "人设"
-    if not base.is_dir():
-        return []
-    return sorted(p for p in base.iterdir() if p.is_dir() and (p / "人设卡.md").is_file())
+    """候选人设目录：老的一批（output/人设）+ 新闻方向那批（output/人设-新闻）。"""
+    out: list[Path] = []
+    for base in (ROOT / "output" / "人设", ROOT / "output" / "人设-新闻"):
+        if not base.is_dir():
+            continue
+        out.extend(sorted(p for p in base.iterdir() if p.is_dir() and (p / "人设卡.md").is_file()))
+    return out
 
 
 def do_content_personas() -> dict[str, Any]:
@@ -783,8 +786,8 @@ def do_content_persona_set(params: dict[str, Any]) -> dict[str, Any]:
             PERSONA_FILE.unlink()
         return {"current": ""}
 
-    src = ROOT / "output" / "人设" / key / "人设卡.md"
-    if not src.is_file():
+    src = next((folder / "人设卡.md" for folder in _persona_dirs() if folder.name == key), None)
+    if src is None:
         raise ValueError(f"没有这份人设卡：{key}")
 
     PERSONA_FILE.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
