@@ -563,6 +563,14 @@
       '</div></div>' +
       '<button class="btn small" id="w-copy">复制文案</button></div>';
 
+    if(!d.chars){
+      h += '<div class="err" style="margin-bottom:12px">' +
+        '<b>这篇没有原文。</b>只能凭标题写，所以每一句具体事实都无从核查——' +
+        '审核就是在这一步拦下来的。<br>' +
+        '把文章正文粘到上面「粘贴正文」（或换成有链接的分类），再跑一次，质量和审核都会正常。' +
+        '</div>';
+    }
+
     h += '<div style="white-space:pre-wrap;font-size:14px;line-height:1.8;background:#fdfcfa;padding:14px;border-radius:8px;border:1px solid var(--line)">' +
       esc(draft.body || "") + '</div>';
 
@@ -1183,8 +1191,9 @@
         $("w-result").className = "empty";
         $("w-result").textContent = usable
           ? "已填入主题和原文链接，点「开始生成」。"
-          : "已填入主题——这条没有可抓的原文（热搜只有搜索页），"
-            + "建议把文章正文粘到上面的「粘贴正文」，或者换一条「AI与科技 / 国际 / 财经」里有链接的。";
+          : "已填入主题——这条没有可抓的原文（热搜只有搜索页）。"
+            + "只凭标题写，具体事实无从核查、审核大概率不过；"
+            + "把文章正文粘到上面的「粘贴正文」，或换一条「AI与科技 / 国际 / 财经」里有链接的。";
         if($("w-go").focus) $("w-go").focus();
         window.scrollTo(0, 0);
 
