@@ -198,6 +198,12 @@
         <button class="btn primary" id="w-go">生成</button>
       </div>
 
+      <div class="row" style="gap:10px;margin-bottom:10px">
+        <span class="muted" style="font-size:12.5px">人设</span>
+        <select id="w-persona" style="width:190px"></select>
+        <span class="muted" id="w-persona-hint" style="font-size:12px"></span>
+      </div>
+
       <details style="margin-bottom:10px">
         <summary class="muted" style="cursor:pointer;font-size:12.5px">链接抓不到？直接粘贴正文</summary>
         <textarea id="w-text" placeholder="把文章正文贴进来，标题填下面" style="margin-top:8px;min-height:100px"></textarea>
@@ -522,7 +528,38 @@
       sel.innerHTML = (d.skills || []).map(function(s){
         return '<option value="' + esc(s) + '"' + (s === d.default ? " selected" : "") + '>' + esc(s) + '</option>';
       }).join("") || '<option>小红书</option>';
+      loadPersonas();
     }).catch(function(){});
+  }
+
+  function loadPersonas(){
+    fetch("/api/content/personas").then(function(r){ return r.json(); }).then(function(d){
+      var sel = $("w-persona");
+      if(!sel) return;
+      var cur = d.current || "";
+      sel.innerHTML = '<option value="">（不用人设）</option>' + (d.personas || []).map(function(p){
+        return '<option value="' + esc(p.key) + '"' + (p.name === cur ? " selected" : "") + '>' + esc(p.name) + '</option>';
+      }).join("");
+      $("w-persona-hint").textContent = cur
+        ? "当前：" + cur
+        : "没设人设，写出来会偏「通用口吻」";
+    }).catch(function(){});
+  }
+
+  /* 换人设：写进 pipeline/content/persona.md，下次生成就生效 */
+  if($("w-persona")){
+    $("w-persona").addEventListener("change", function(){
+      var key = this.value;
+      fetch("/api/content/persona", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({key: key})
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if(d.error) throw new Error(d.error);
+        $("w-persona-hint").textContent = d.current
+          ? "当前：" + d.current + "（下次生成生效）"
+          : "已清空人设";
+      }).catch(function(e){ alert(e.message); });
+    });
   }
 
   /* 每个平台能发什么，由后端 /api/content/meta 给，界面不写死 */

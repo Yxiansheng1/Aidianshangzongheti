@@ -17,6 +17,9 @@ from ..model.client import ModelError, OpenAICompatible
 SKILL_DIR = Path(__file__).parent / "skills"
 DEFAULT_SKILL = "小红书"
 
+# 账号人设。存在就追加到每份 skill 后面：平台决定「怎么写」，人设决定「谁在写」。
+PERSONA_FILE = Path(__file__).parent / "persona.md"
+
 # 各平台的硬限制。skill 里写了，代码也兜一层，防止模型不听话。
 TITLE_LIMITS = {
     "小红书": 20, "头条": 30, "百家号": 30,
@@ -203,6 +206,25 @@ def load_skill(name: str = DEFAULT_SKILL) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def load_persona() -> str:
+    """读当前账号人设。没有文件就返回空串，不影响出稿。"""
+    if not PERSONA_FILE.is_file():
+        return ""
+    text = PERSONA_FILE.read_text(encoding="utf-8").strip()
+    return text
+
+
+def persona_block() -> str:
+    text = load_persona()
+    if not text:
+        return ""
+    return (
+        "\n\n---\n\n## 附：这个账号的人设（写稿时始终遵守）\n\n"
+        "下面这些是「谁在写」，优先级高于风格偏好；和平台腔调冲突时，"
+        "**平台格式听平台的，说话方式听人设的**。\n\n" + text + "\n"
+    )
+
+
 def _strip_fence(text: str) -> str:
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
     return (fenced.group(1) if fenced else text).strip()
@@ -250,6 +272,38 @@ def _trim_incomplete(text: str, limit: int) -> str:
     if match and len(text[: match.start() + 1]) >= limit * 0.6:
         return text[: match.start() + 1].rstrip()
     return text.rstrip().rstrip("，,、；;") + "。"
+
+
+TITLE_FIT_PROMPT = """这个标题 {n} 字，超过平台上限 {limit} 字。
+
+请给一个不超过 {limit} 字的新标题：
+- 保留最具体的信息（公司名、数字、动作）
+- 不要为了缩短变成标题党或空话
+- 只输出标题本身，不要引号、不要解释、不要换行
+
+原标题：{title}
+"""
+
+
+def _shorter_title(client: OpenAICompatible, system: str, title: str, limit: int) -> str:
+    """标题超长时让模型重写一个，而不是硬截成半句。
+
+    硬截的后果实测过：「…财报里出问题的地方通常不在营收那一」。
+    模型改不好（或改出来还是超长）就退回 _smart_truncate。
+    """
+    try:
+        raw = _ask(
+            client,
+            TITLE_FIT_PROMPT.format(n=len(title), limit=limit, title=title),
+            system, max_tokens=200, temperature=0.4,
+        )
+    except ModelError:
+        return _smart_truncate(title, limit)
+
+    candidate = raw.strip().splitlines()[0].strip().strip('"“”《》 ')
+    if candidate and 6 <= len(candidate) <= limit:
+        return candidate
+    return _smart_truncate(title, limit)
 
 
 def _fit_length(
@@ -341,7 +395,7 @@ def rewrite(
     if not topic.strip():
         raise ValueError("主题不能为空")
 
-    system = load_skill(platform) + SHARED_RULES
+    system = load_skill(platform) + persona_block() + SHARED_RULES
 
     client = OpenAICompatible(
         base_url=cfg.model.base_url,
@@ -392,7 +446,7 @@ def rewrite(
     tag_limit = TAG_LIMITS.get(platform, 5)
 
     if len(title) > title_limit:
-        title = _smart_truncate(title, title_limit)
+        title = _shorter_title(client, system, title, title_limit)
 
     # 后面几轮改写可能已经改短了，别把「已截断」的旧提示留着误导人
     if len(body) <= high:

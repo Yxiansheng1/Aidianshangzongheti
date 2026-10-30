@@ -705,14 +705,66 @@ def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
     return {"started": True, "action": action, "message": message}
 
 
+def _persona_dirs() -> list[Path]:
+    base = ROOT / "output" / "人设"
+    if not base.is_dir():
+        return []
+    return sorted(p for p in base.iterdir() if p.is_dir() and (p / "人设卡.md").is_file())
+
+
+def do_content_personas() -> dict[str, Any]:
+    """有哪些候选人设、现在用的是哪个。"""
+    from ..content.rewrite import PERSONA_FILE
+
+    items = []
+    for folder in _persona_dirs():
+        avatars = sorted(folder.glob("avatar-*.png"))
+        items.append({
+            "key": folder.name,
+            "name": folder.name.split("-", 1)[-1],
+            "avatars": ["/file?path=" + urllib.parse.quote(str(a)) for a in avatars],
+        })
+
+    current = ""
+    if PERSONA_FILE.is_file():
+        first = PERSONA_FILE.read_text(encoding="utf-8").strip().splitlines()
+        current = first[0].lstrip("# ").strip() if first else ""
+    return {"personas": items, "current": current}
+
+
+def do_content_persona_set(params: dict[str, Any]) -> dict[str, Any]:
+    """把某份人设卡设为当前人设；key 传空 = 清掉，回到没人设。"""
+    from ..content.rewrite import PERSONA_FILE
+
+    key = str(params.get("key") or "").strip()
+    if not key:
+        if PERSONA_FILE.is_file():
+            PERSONA_FILE.unlink()
+        return {"current": ""}
+
+    src = ROOT / "output" / "人设" / key / "人设卡.md"
+    if not src.is_file():
+        raise ValueError(f"没有这份人设卡：{key}")
+
+    PERSONA_FILE.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    return {"current": key.split("-", 1)[-1], "key": key}
+
+
 def do_content_meta() -> dict[str, Any]:
     from ..content.rewrite import list_skills
     from ..content import publish as pub
 
     skills = list_skills()
+    persona = ""
+    from ..content.rewrite import PERSONA_FILE
+    if PERSONA_FILE.is_file():
+        head = PERSONA_FILE.read_text(encoding="utf-8").strip().splitlines()
+        persona = head[0].lstrip("# ").strip() if head else ""
+
     return {
         "skills": skills,
         "default": "小红书",
+        "persona": persona,
         # 每个平台能发什么形态，界面据此决定显示哪些按钮
         "publish": {name: pub.kinds(name) for name in skills},
         "no_publish": {k: v for k, v in pub.NO_PUBLISH_REASON.items() if k in skills},
@@ -1140,6 +1192,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(do_content_meta())
                 return
 
+            if route == "/api/content/personas":
+                self._json(do_content_personas())
+                return
+
             if route == "/api/trends":
                 params = {k: _fix_mojibake(v[0]) for k, v in query.items() if v}
                 self._json(do_trends(params))
@@ -1277,6 +1333,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/content/skill":
                 self._json(do_content_skill(payload))
+                return
+
+            if route == "/api/content/persona":
+                self._json(do_content_persona_set(payload))
                 return
 
             if route == "/api/content/video":
