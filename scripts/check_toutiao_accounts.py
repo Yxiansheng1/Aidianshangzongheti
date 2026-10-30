@@ -1,7 +1,7 @@
 """核对头条每个账号到底登的是谁。
 
-只读后台首页，把「账号名 / 是否完善信息」打出来。
-两个号如果显示同一个名字，说明登录态是同一份，必须重新登录。
+判据用后台接口的 user_id（稳定），昵称只作展示。
+两个号 user_id 相同 = 同一个头条号，必须重新登录。
 
     D:\\social-auto-upload\\.venv\\Scripts\\python.exe scripts\\check_toutiao_accounts.py
 """
@@ -14,38 +14,41 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from patchright.sync_api import sync_playwright
 
+from pipeline.content.headline import HOME_URL, identity_of
+
 STATE_DIR = Path(r"D:\AIdianshangzongheti\output\_state")
-HOME = "https://mp.toutiao.com/profile_v4/index"
 
 
-def check(page, state: Path) -> dict:
-    page.goto(HOME, wait_until="domcontentloaded", timeout=40000)
-    page.wait_for_timeout(4000)
-    body = ""
-    try:
-        body = page.inner_text("body")
-    except Exception:  # noqa: BLE001
-        pass
-
-    lines = [x.strip() for x in body.splitlines() if x.strip()]
-    name = ""
-    for line in lines[:40]:
-        if line.startswith("用户") and line[2:].isdigit():
-            name = line
-            break
-    if not name:
-        for line in lines[:40]:
-            if 2 <= len(line) <= 20 and not any(k in line for k in
-                    ("头条号", "消息", "主页", "创作", "管理", "数据", "工具", "设置", "收益")):
-                name = line
-                break
-
-    return {
-        "url": page.url,
-        "logged": "auth" not in page.url and "login" not in page.url,
-        "name": name,
-        "need_profile": "请完善账号信息" in body,
+def check(browser, state: Path) -> dict:
+    ctx = browser.new_context(
+        storage_state=str(state), viewport={"width": 1400, "height": 900}
+    )
+    page = ctx.new_page()
+    info: dict = {
+        "account": state.stem[len("toutiao-"):],
+        "state_file": state.name,
+        "logged": False,
+        "user_id": "",
+        "name": "",
+        "need_profile": False,
     }
+    try:
+        page.goto(HOME_URL, wait_until="domcontentloaded", timeout=40000)
+        page.wait_for_timeout(3500)
+        info["logged"] = "auth" not in page.url and "login" not in page.url
+        if info["logged"]:
+            ident = identity_of(page)
+            info["user_id"] = ident.get("user_id", "")
+            info["name"] = ident.get("name", "")
+            try:
+                info["need_profile"] = "请完善账号信息" in page.inner_text("body")
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception as exc:  # noqa: BLE001
+        info["error"] = str(exc)[:100]
+    finally:
+        ctx.close()
+    return info
 
 
 def main() -> None:
@@ -58,31 +61,25 @@ def main() -> None:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, channel="chromium")
         for state in states:
-            account = state.stem[len("toutiao-"):]
-            ctx = browser.new_context(storage_state=str(state), viewport={"width": 1400, "height": 900})
-            page = ctx.new_page()
-            try:
-                info = check(page, state)
-            except Exception as exc:  # noqa: BLE001
-                info = {"error": str(exc)[:100]}
-            info["account"] = account
-            info["state_file"] = state.name
+            info = check(browser, state)
             out.append(info)
-            print(f"\n== 账号 {account} ==")
-            print("  登录:", info.get("logged"))
-            print("  账号名:", info.get("name") or "（读不到）")
-            print("  需要完善信息:", info.get("need_profile"))
+            print(f"\n== 账号 {info['account']} ==")
+            print("  登录:", info["logged"])
+            print("  昵称:", info["name"] or "（读不到）")
+            print("  账号ID:", info["user_id"] or "（读不到）")
+            print("  需要完善信息:", info["need_profile"])
             if info.get("error"):
                 print("  错误:", info["error"])
-            ctx.close()
         browser.close()
 
-    names = [i.get("name") for i in out if i.get("name")]
-    print("\n" + "=" * 50)
-    if len(names) >= 2 and len(set(names)) == 1:
-        print("⚠ 两个号显示的是同一个账号名 —— 登录态重复了，必须重新登录其中一个")
-    elif len(set(names)) == len(names):
-        print("✅ 每个号对应不同账号")
+    uids = [i["user_id"] for i in out if i.get("user_id")]
+    print("\n" + "=" * 52)
+    if len(uids) != len(set(uids)):
+        print("⚠ 两个账号的 user_id 相同 —— 是同一个头条号，必须换号重新登录")
+    elif len(out) >= 2 and all(i["logged"] for i in out):
+        print("✅ 每个账号都是独立的头条号")
+    else:
+        print("部分账号未登录，见上")
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 

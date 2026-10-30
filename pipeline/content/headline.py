@@ -33,6 +33,8 @@ STATE_DIR = ROOT / "output" / "_state"
 LOG_FILE = STATE_DIR / "headline.log"
 EDITOR_URL = "https://mp.toutiao.com/profile_v4/graphic/publish"
 HOME_URL = "https://mp.toutiao.com/profile_v4/index"
+IDENTITY_API = "https://mp.toutiao.com/mp/agw/creator_center/user_info"
+IDENTITY_FILE = STATE_DIR / "toutiao-identity.json"
 
 
 def state_file(account: str = "main") -> Path:
@@ -174,6 +176,83 @@ def _save_state(context) -> None:
     _say(f"[状态] 登录态已保存（账号 {ACCOUNT}）：{target.name}")
 
 
+def identity_of(page) -> dict[str, str]:
+    """当前登录的是谁：user_id 稳定，昵称会改，只作展示。"""
+    try:
+        resp = page.request.get(IDENTITY_API, timeout=20000)
+        if resp.status == 200:
+            data = resp.json() or {}
+            uid = str(data.get("user_id_str") or data.get("user_id") or "")
+            if uid:
+                return {
+                    "user_id": uid,
+                    "name": str(data.get("name") or ""),
+                    "media_id": str(data.get("media_id") or ""),
+                }
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
+
+
+def _identities() -> dict[str, dict[str, str]]:
+    try:
+        raw = json.loads(IDENTITY_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for account, value in raw.items():
+        if isinstance(value, dict) and value.get("user_id"):
+            out[str(account)] = {k: str(v) for k, v in value.items()}
+    return out
+
+
+def _remember_identity(account: str, ident: dict[str, str]) -> None:
+    known = _identities()
+    known[account] = ident
+    IDENTITY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    IDENTITY_FILE.write_text(
+        json.dumps(known, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+
+
+def _commit_login(page, context) -> bool:
+    """确认真登录 → 记下身份 → 存登录态。
+
+    同一个头条号被存成两个账号，是这里最不能犯的错：
+    那样两篇稿都会发到同一个号上，平台判重复内容，比发错号还糟。
+    """
+    if not _session_ok(page):
+        return False
+
+    ident = identity_of(page)
+    known = _identities()
+    uid = ident.get("user_id", "")
+
+    for other, info in known.items():
+        if other == ACCOUNT:
+            continue
+        same = (uid and info.get("user_id") == uid) or (
+            not uid and ident.get("name") and info.get("name") == ident.get("name")
+        )
+        if same:
+            _say("")
+            _say("!" * 60)
+            _say(f" ❌ 这个号和已经登录的「{other}」是同一个头条号。")
+            _say(f"    账号：{ident.get('name') or '（读不到昵称）'}　ID：{uid or '未知'}")
+            _say("    没有保存——两个账号指向同一个号，会把同一篇稿发两遍。")
+            _say(f"    请换另一个手机号登录：把 {state_file(ACCOUNT).name} 相关状态清掉后重来。")
+            _say("!" * 60)
+            raise SystemExit(1)
+
+    _save_state(context)
+    if ident:
+        _remember_identity(ACCOUNT, ident)
+        _say(f"[身份] 账号 {ACCOUNT} = {ident.get('name') or '?'}（ID {uid}）")
+    else:
+        _say("[警告] 读不到账号身份，没法确认这个号是不是已经登过的那个。")
+    return True
+
+
 def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
     """没登录就等用户扫码，登录成功后继续。"""
     page.goto(page_url, wait_until="domcontentloaded")
@@ -184,11 +263,10 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
         pass
     # 编辑器页对匿名用户也会渲染，先看首页确认是真登录，再决定要不要等
     if _logged_in(page):
-        if _session_ok(page):
-            # 刚刚为核对跑到了首页，填稿前得回到编辑器
+        if _commit_login(page, context):
+            # 核对身份时跑到了首页，填稿前得回到编辑器
             page.goto(page_url, wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
-            _save_state(context)
             return
 
     _say("")
@@ -204,9 +282,8 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
         if "auth" in url or "login" in url:
             continue  # 还在登录页，继续等扫码
         # 已经离开登录页 → 用后台首页确认一次，确认过才存
-        if _session_ok(page):
+        if _commit_login(page, context):
             _say("[状态] 登录成功，继续。")
-            _save_state(context)
             page.goto(page_url, wait_until="domcontentloaded")
             page.wait_for_timeout(1500)
             return
@@ -241,9 +318,8 @@ def login(account: str = "main") -> None:
             page.wait_for_timeout(3000)
             if "auth" in page.url or "login" in page.url:
                 continue  # 还在登录页
-            # 离开登录页不算数，得后台首页能进才存——否则会把匿名态存成"已登录"
-            if _session_ok(page):
-                _save_state(context)
+            # 离开登录页不算数，得后台首页能进、且不是已经登过的号，才存
+            if _commit_login(page, context):
                 _say("[完成] 登录态已保存，下次填稿不用再扫码。")
                 break
         else:
