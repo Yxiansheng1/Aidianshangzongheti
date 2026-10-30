@@ -45,6 +45,7 @@ DEFAULT_PROXY = "http://127.0.0.1:7897"
 CATEGORIES = [
     "国内热搜", "AI与科技", "政治", "国际", "军事",
     "财经", "影视", "体育", "学术", "游戏",
+    "政策", "历史",
 ]
 
 
@@ -266,6 +267,85 @@ def _fetch_hn(proxy: str | None) -> list[TrendItem]:
     return items
 
 
+POLICY_LINK = re.compile(r'href="([^"]*zhengce/content/[^"]+\.htm)"[^>]*>(.*?)</a>', re.S)
+
+# 历史源只留这些方向：中国、战争、军队、条约、工业建设
+HISTORY_KEEP = (
+    "中国", "中华", "战", "军", "条约", "协定", "铁路", "工厂", "解放",
+    "抗战", "清", "民国", "人民", "革命", "外交", "投降", "起义", "建设", "迁",
+)
+
+
+def _fetch_gov_policy(proxy: str | None) -> list[TrendItem]:
+    """国务院政策：从政策频道首页解析出政策文件链接。
+
+    索引页是静态 HTML（36KB 左右），但正文提取器会把链接全过滤掉，
+    所以这里直接读原始 HTML 抠 <a>。
+    """
+    raw = _get("https://www.gov.cn/zhengce/", proxy=proxy, timeout=25)
+    page = raw.decode("utf-8", "replace")
+
+    items: list[TrendItem] = []
+    seen: set[str] = set()
+    for href, inner in POLICY_LINK.findall(page):
+        title = re.sub(r"<[^>]+>", " ", inner)
+        title = re.sub(r"\s+", " ", title).strip()
+        if len(title) < 6:
+            continue
+        url = urllib.parse.urljoin("https://www.gov.cn/zhengce/", href)
+        if url in seen:
+            continue
+        seen.add(url)
+        items.append(TrendItem(
+            source="gov", source_name="国务院政策", category="政策",
+            rank=len(items) + 1, title=title, url=url,
+        ))
+        if len(items) >= 25:
+            break
+    return items
+
+
+def _fetch_history(proxy: str | None) -> list[TrendItem]:
+    """维基「历史上的今天」：每天返回 50 条，这里只留中国/战史/工业方向的。
+
+    这是「碰运气」的来源——撞上能写的题就用，撞不上还有题库。
+    """
+    now = datetime.now()
+    api = f"https://zh.wikipedia.org/api/rest_v1/feed/onthisday/events/{now.month}/{now.day}"
+    raw = _get(api, proxy=proxy, timeout=25)
+    data = json.loads(raw.decode("utf-8", "replace"))
+
+    items: list[TrendItem] = []
+    for event in data.get("events") or []:
+        text = re.sub(r"\s+", " ", str(event.get("text") or "")).strip()
+        if len(text) < 12:
+            continue
+        if not any(key in text for key in HISTORY_KEEP):
+            continue
+
+        pages = event.get("pages") or []
+        slug = ""
+        for page in pages:
+            title = str((page.get("titles") or {}).get("normalized") or "")
+            # 优先指向具体词条，别指向「2002年」这种年份页
+            if title and not re.fullmatch(r"\d{3,4}年", title):
+                slug = title
+                break
+        if not slug and pages:
+            slug = str((pages[0].get("titles") or {}).get("normalized") or "")
+        url = f"https://zh.wikipedia.org/wiki/{urllib.parse.quote(slug)}" if slug else ""
+
+        items.append(TrendItem(
+            source="wiki_otd", source_name="维基·历史上的今天", category="历史",
+            rank=len(items) + 1,
+            title=f"{event.get('year')}年 {text[:44]}",
+            url=url,
+        ))
+        if len(items) >= 15:
+            break
+    return items
+
+
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 
@@ -332,6 +412,10 @@ class Source:
 
 
 SOURCES: list[Source] = [
+    # 政策 / 历史（给两个头条号用：号1 政策解读，号2 近代史战史）
+    Source("gov", "国务院政策", "政策", False, _fetch_gov_policy),
+    Source("wiki_otd", "维基·历史上的今天", "历史", True, _fetch_history),
+
     # 国内
     Source("baidu", "百度热搜", "国内热搜", False, _fetch_baidu),
     Source("weibo", "微博热搜", "国内热搜", False, _fetch_weibo),

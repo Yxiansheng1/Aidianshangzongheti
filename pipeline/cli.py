@@ -410,11 +410,13 @@ def _cmd_content(args: argparse.Namespace) -> int:
         print(exc)
         return 2
 
-    print(f"开始跑：{args.url or args.file}  →  {args.platform}\n")
+    print(f"开始跑：{args.url or args.file}  →  {args.platform}"
+          + (f"（题材：{args.mode}）" if getattr(args, "mode", "") else "") + "\n")
     result = content_pipeline.run(
         args.url or "",
         cfg,
         platform=args.platform,
+        mode=getattr(args, "mode", "") or "",
         images=args.images,
         draw=not args.no_draw,
         article=article,
@@ -643,6 +645,7 @@ def main(argv: list[str] | None = None) -> int:
     p_ct.add_argument("--file", help="本地文本文件（代替 --url）")
     p_ct.add_argument("--topic", help="主题，默认用文章标题")
     p_ct.add_argument("--platform", default="小红书", help="用哪个 skill，默认 小红书")
+    p_ct.add_argument("--mode", default="", help="题材：政策解读 / 国际军事 / 历史（可留空）")
     p_ct.add_argument("--images", type=int, default=2, help="生成几张配图，默认 2")
     p_ct.add_argument("--no-draw", action="store_true", help="只写文案，不出图")
     p_ct.add_argument("--skills", action="store_true", help="列出可用的 skill")
