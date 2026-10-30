@@ -672,40 +672,78 @@ def _sau_python(cfg: Any) -> str:
 
 
 def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
-    """头条号：工具填稿，人点发布。开一个新控制台跑，看得见它干了什么。"""
+    """头条号：工具填稿，人点发布。开一个新控制台跑，看得见它干了什么。
+
+    三种 action：
+        login  扫码登录某个账号
+        fill   把稿子填进某个账号的编辑器
+        both   一稿两版：A 版给账号1、B 版给账号2（避免两号发同一篇被判重复）
+    """
     from ..content import headline
 
     cfg = load_config()
     action = str(params.get("action") or "fill")
     account = "".join(ch for ch in str(params.get("account") or "main") if ch.isalnum() or ch in "-_") or "main"
     label = str(params.get("label") or account)
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
 
-    if action == "login":
-        args = [_sau_python(cfg), "-m", "pipeline.content.headline",
-                "login", "--account", account]
-        message = f"已打开浏览器（{label}），扫码登录这个头条号；登录后窗口自动关闭，下次填稿不用再扫。"
-    else:
-        title = str(params.get("title") or "").strip()
-        body = str(params.get("body") or "").strip()
-        if not title or not body:
-            raise ValueError("没有标题或正文，先生成一篇")
+    def spawn(args_: list[str]) -> None:
+        subprocess.Popen(args_, cwd=str(ROOT), creationflags=flags)
 
+    def write_draft(acc: str, t: str, b: str) -> Path:
         headline.STATE_DIR.mkdir(parents=True, exist_ok=True)
-        draft_path = headline.STATE_DIR / f"toutiao-draft-{account}.json"
-        draft_path.write_text(json.dumps({
-            "title": title,
-            "body": body,
+        path = headline.STATE_DIR / f"toutiao-draft-{acc}.json"
+        path.write_text(json.dumps({
+            "title": t,
+            "body": b,
             "images": list(params.get("images") or []),
             "url": str(params.get("url") or ""),
         }, ensure_ascii=False, indent=1), encoding="utf-8")
+        return path
 
-        args = [_sau_python(cfg), "-m", "pipeline.content.headline",
-                "fill", "--draft", str(draft_path), "--account", account]
-        message = (f"已在浏览器里填稿（{label}）。填完它会停下等你——检查、选封面、点发布，最后按回车关窗口。")
+    py = _sau_python(cfg)
 
-    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-    subprocess.Popen(args, cwd=str(ROOT), creationflags=flags)
-    return {"started": True, "action": action, "account": account, "message": message}
+    if action == "login":
+        spawn([py, "-m", "pipeline.content.headline", "login", "--account", account])
+        return {
+            "started": True, "action": action, "account": account,
+            "message": f"已打开浏览器（{label}），扫码登录这个头条号；登录后窗口自动关闭，下次填稿不用再扫。",
+        }
+
+    title = str(params.get("title") or "").strip()
+    body = str(params.get("body") or "").strip()
+    if not title or not body:
+        raise ValueError("没有标题或正文，先生成一篇")
+
+    if action == "both":
+        from ..content.variants import make_variant
+
+        platform = str(params.get("platform") or "头条")
+        second = make_variant(title, body, cfg, platform=platform)
+
+        first_path = write_draft("main", title, body)
+        second_path = write_draft("second", second["title"], second["body"])
+
+        spawn([py, "-m", "pipeline.content.headline", "fill",
+               "--draft", str(first_path), "--account", "main"])
+        spawn([py, "-m", "pipeline.content.headline", "fill",
+               "--draft", str(second_path), "--account", "second"])
+
+        return {
+            "started": True, "action": action,
+            "first_title": title,
+            "second_title": second["title"],
+            "message": (f"两个窗口都开了。账号1 放第一版，账号2 放第二版"
+                        f"（「{second['title'][:22]}」）。各自检查后自己点发布。"),
+        }
+
+    draft_path = write_draft(account, title, body)
+    spawn([py, "-m", "pipeline.content.headline", "fill",
+           "--draft", str(draft_path), "--account", account])
+    return {
+        "started": True, "action": action, "account": account,
+        "message": f"已在浏览器里填稿（{label}）。填完它会停下等你——检查、选封面、点发布，最后按回车关窗口。",
+    }
 
 
 def _persona_dirs() -> list[Path]:

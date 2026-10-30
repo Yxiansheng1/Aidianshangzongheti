@@ -655,6 +655,7 @@
         '<option value="second">账号2</option>' +
         '</select>' +
         '<button class="btn" data-w="headline">填进头条编辑器</button>' +
+        '<button class="btn" data-w="both">一稿两版（两个号）</button>' +
         '<button class="btn small" data-w="login">登录这个号</button>';
     }
     h += '<button class="btn" data-w="cmd" data-platform="' + esc(plat) + '">看发布命令</button>';
@@ -718,20 +719,36 @@
           return;
         }
 
-        if(kind === "headline" || kind === "login"){
+        if(kind === "headline" || kind === "login" || kind === "both"){
           var accSel = $("w-acc");
           var acc = accSel ? accSel.value : "main";
           var accLabel = (accSel && accSel.selectedIndex >= 0) ? accSel.options[accSel.selectedIndex].text : acc;
           btn.disabled = true;
-          extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>正在打开浏览器…</span></div>';
+          extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>' +
+            (kind === "both" ? "正在写第二版（约 1 分钟），然后开两个窗口…" : "正在打开浏览器…") +
+            '</span></div>';
 
-          var body = kind === "login"
-            ? { action: "login", account: acc, label: accLabel }
-            : { action: "fill", account: acc, label: accLabel,
-                title: (d.draft || {}).title || "",
-                body: (d.draft || {}).body || "",
-                images: (d.images || []).map(function(x){ return x.path; }),
-                url: $("w-url").value.trim() };
+          var body;
+          if(kind === "login"){
+            body = { action: "login", account: acc, label: accLabel };
+          }else if(kind === "both"){
+            body = {
+              action: "both",
+              platform: (d.draft || {}).platform || "头条",
+              title: (d.draft || {}).title || "",
+              body: (d.draft || {}).body || "",
+              images: (d.images || []).map(function(x){ return x.path; }),
+              url: $("w-url").value.trim()
+            };
+          }else{
+            body = {
+              action: "fill", account: acc, label: accLabel,
+              title: (d.draft || {}).title || "",
+              body: (d.draft || {}).body || "",
+              images: (d.images || []).map(function(x){ return x.path; }),
+              url: $("w-url").value.trim()
+            };
+          }
 
           fetch("/api/content/headline", {
             method:"POST", headers:{"Content-Type":"application/json"},
