@@ -647,6 +647,7 @@ def do_content_pub(params: dict[str, Any]) -> dict[str, Any]:
         "tags": list(params.get("tags") or []),
         "images": list(params.get("images") or []),
         "video": str(params.get("video") or ""),
+        "account": str(params.get("account") or ""),
     }
 
     flag = params.get("execute")
@@ -792,6 +793,13 @@ def do_content_persona_set(params: dict[str, Any]) -> dict[str, Any]:
 
     PERSONA_FILE.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     return {"current": key.split("-", 1)[-1], "key": key}
+
+
+def do_content_accounts() -> dict[str, Any]:
+    """所有平台的账号清单与登录态。界面据此渲染下拉，避免发错号。"""
+    from ..content.accounts import login_state
+
+    return login_state()
 
 
 def do_content_meta() -> dict[str, Any]:
@@ -1246,6 +1254,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/content/personas":
                 self._json(do_content_personas())
+                return
+
+            if route == "/api/content/accounts":
+                self._json(do_content_accounts())
                 return
 
             if route == "/api/trends":

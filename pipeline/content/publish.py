@@ -89,9 +89,13 @@ def build(
     tags: list[str],
     images: list[str] | None = None,
     video: str = "",
+    account: str = "",
     cfg: Any,
 ) -> dict[str, Any]:
-    """生成发布命令。不执行。"""
+    """生成发布命令。不执行。
+
+    account：同一平台下的账号名（sau 的 --account）。留空就用 config 里的默认。
+    """
     if platform in NO_PUBLISH_REASON:
         raise ValueError(f"不支持发布到{platform}：{NO_PUBLISH_REASON[platform]}")
 
@@ -112,7 +116,7 @@ def build(
     if kind == "video" and not Path(video).is_file():
         raise ValueError(f"视频文件不存在：{video}")
 
-    account = cfg.accounts.get(sau_platform, "main")
+    account = (account or cfg.accounts.get(sau_platform) or "main").strip()
     product = {
         "id": platform,
         "name": title,
