@@ -862,6 +862,7 @@ def start_content(params: dict[str, Any]) -> dict[str, Any]:
         draft = result["draft"]
         visual = result.get("steps", {}).get("visual", {})
         files = visual.get("files") or []
+        fetch_step = result.get("steps", {}).get("fetch", {}) or {}
 
         return {
             "draft": draft,
@@ -869,8 +870,13 @@ def start_content(params: dict[str, Any]) -> dict[str, Any]:
                 {"path": f, "url": "/file?path=" + urllib.parse.quote(f)}
                 for f in files
             ],
+            "source_images": [
+                {"path": p, "url": "/file?path=" + urllib.parse.quote(p)}
+                for p in (fetch_step.get("images") or [])
+            ],
+            "source_image_note": fetch_step.get("image_note", ""),
             "review": result.get("steps", {}).get("review", {}),
-            "chars": result.get("steps", {}).get("fetch", {}).get("chars", 0),
+            "chars": fetch_step.get("chars", 0),
             "dir": result.get("dir", ""),
         }
 

@@ -647,6 +647,17 @@
       h += '</div></div>';
     }
 
+    if((d.source_images || []).length){
+      h += '<div style="margin-top:14px"><div class="muted" style="font-weight:600;margin-bottom:6px">' +
+        '原文配图（参照用，别直接发——版权在人家手里）</div>' +
+        '<div class="row" style="gap:8px;margin-bottom:6px">' +
+        d.source_images.map(function(img){
+          return '<img src="' + img.url + '" style="height:110px;border-radius:6px;border:1px solid var(--line)">';
+        }).join("") + '</div>' +
+        (d.source_image_note ? '<div class="muted" style="font-size:12px">画面：' + esc(d.source_image_note) + '</div>' : '') +
+        '</div>';
+    }
+
     var plat = draft.platform || "小红书";
     var notePubs = platformsWith("note");
     notePubs.sort(function(a, b){ return (b === plat) - (a === plat); });

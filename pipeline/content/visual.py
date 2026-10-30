@@ -104,7 +104,7 @@ PLAN_PROMPT = """从下面这篇要发**{platform}**的文案里，挑 {n} 个�
   **道具要用位置关系写（lying on / beside / behind / in the background）**，
   只堆名词模型会只画主体、把其他东西全丢掉。
   不要写 light、film、bokeh、sharp focus 这类词，风格由代码统一追加。
-
+{ref_section}
 文案标题：{title}
 
 文案正文：
@@ -200,15 +200,29 @@ def plan(
     *,
     n: int = 2,
     platform: str = "小红书",
+    ref_note: str = "",
 ) -> list[dict[str, Any]]:
-    """让模型给出配图方案，并把「没落到原文」的画面剔掉。"""
+    """让模型给出配图方案，并把「没落到原文」的画面剔掉。
+
+    ref_note：原文配图的画面描述（由视觉模型给出）。有它就对齐世界观，
+    但明确要求不要复刻构图——照抄一张通讯社图是要出事的。
+    """
     client = _client(cfg)
+
+    ref_section = ""
+    if ref_note.strip():
+        ref_section = (
+            "\n## 原文配图里有什么（对齐世界观，不要照抄）\n\n"
+            f"> {ref_note.strip()[:200]}\n\n"
+            "新图要和这段描述的场景、物件、氛围一致，**但不要复刻构图，也不要画成同一张照片**。\n"
+        )
 
     def ask(extra: str = "") -> list[dict[str, Any]]:
         prompt = PLAN_PROMPT.format(
             n=n, title=title, body=body[:3000],
             platform=platform, banned=BANNED_FALLBACK,
             tone=PLATFORM_TONE.get(platform, PLATFORM_TONE["小红书"]),
+            ref_section=ref_section,
         )
         raw = client.ask(
             prompt + extra, system=SYSTEM, max_tokens=1800, temperature=0.6,

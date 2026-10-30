@@ -15,7 +15,7 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 UA = (
@@ -43,6 +43,7 @@ class Article:
     chars: int = 0
     ok: bool = False
     note: str = ""
+    images: list[str] = field(default_factory=list)
 
 
 def _get(url: str, proxy: str | None, timeout: int = 25) -> bytes:
@@ -92,6 +93,42 @@ def _meta(html: str, *names: str) -> str:
     return ""
 
 
+def _images(html: str, base: str, limit: int = 6) -> list[str]:
+    """从原文里挑出可用的配图链接。
+
+    先看 og:image（通常是文章主图），再扫 <img>。
+    图标、头像、占位图、广告位一律跳过——抓回来也是垃圾。
+    """
+    skip = ("logo", "icon", "avatar", "sprite", "placeholder", "blank.gif",
+            "spacer", "pixel", "loading", "/ad-", "_ad_", "1x1", "share")
+
+    out: list[str] = []
+    og = _meta(html, "og:image", "twitter:image")
+    if og:
+        out.append(urllib.parse.urljoin(base, og))
+
+    for attr in ("data-src", "data-original", "src"):
+        for match in re.finditer(rf'<img[^>]+{attr}=["\']([^"\']+)["\']', html, re.I):
+            raw_url = html_mod.unescape(match.group(1)).strip()
+            if not raw_url or raw_url.startswith("data:"):
+                continue
+            full = urllib.parse.urljoin(base, raw_url)
+            if not full.lower().startswith(("http://", "https://")):
+                continue
+            if any(key in full.lower() for key in skip):
+                continue
+            out.append(full)
+
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for url in out:
+        if url in seen:
+            continue
+        seen.add(url)
+        uniq.append(url)
+    return uniq[:limit]
+
+
 def fetch(url: str, *, proxy: str | None = None, timeout: int = 25) -> Article:
     url = url.strip()
     if not url.lower().startswith(("http://", "https://")):
@@ -131,6 +168,7 @@ def fetch(url: str, *, proxy: str | None = None, timeout: int = 25) -> Article:
 
     article.text = text[:MAX_CHARS]
     article.chars = len(article.text)
+    article.images = _images(page, url)
     article.ok = article.chars >= 200
 
     if not article.ok and not article.note:

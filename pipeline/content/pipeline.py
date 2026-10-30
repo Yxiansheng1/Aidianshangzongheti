@@ -19,6 +19,60 @@ from ..config import ROOT
 OUT_DIR = ROOT / "output" / "内容"
 
 
+def _grab_source_images(urls: list[str], folder: Path, cfg: Any, limit: int = 3):
+    """把原文配图存到本地，并让视觉模型描述第一张。
+
+    抓回来只做两件事：给视觉模型看（对齐画面）、给你看（参照）。
+    **不直接当成品配图**——通讯社图片有版权，二次发布有风险。
+    """
+    from ..article import _get
+    from ..model.client import OpenAICompatible
+
+    paths: list[Path] = []
+    for index, url in enumerate(urls[:5], 1):
+        try:
+            data = _get(url, cfg.trends.proxy or None, timeout=20)
+        except Exception:  # noqa: BLE001
+            continue
+        if len(data) < 8000:          # 太小，多半还是图标
+            continue
+        if data[:8].startswith(b"\x89PNG"):
+            ext = ".png"
+        elif data[:3] == b"GIF":
+            ext = ".gif"
+        else:
+            ext = ".jpg"
+        target = folder / f"tmp-{index}{ext}"
+        target.write_bytes(data)
+        paths.append(target)
+
+    # 大图更可能是正文照片，小图多半是图标/品牌横幅。按体积取前三。
+    paths.sort(key=lambda p: p.stat().st_size, reverse=True)
+    kept: list[Path] = []
+    for rank, path in enumerate(paths[:limit], 1):
+        final = folder / f"src-img-{rank}{path.suffix}"
+        path.replace(final)
+        kept.append(final)
+    for leftover in paths[limit:]:
+        leftover.unlink(missing_ok=True)
+
+    note = ""
+    if kept and cfg.has_model:
+        try:
+            client = OpenAICompatible(
+                base_url=cfg.model.base_url, api_key=cfg.model.api_key,
+                timeout=120, text_model=cfg.model.text_model,
+            )
+            note = client.ask_image(
+                "用一句中文说这张图画了什么。只描述看到的物件、场景、光线，不评价。",
+                kept[0], system="你只描述画面，不评价。", max_tokens=120, temperature=0,
+            ).strip()[:200]
+        except Exception:  # noqa: BLE001
+            note = ""
+    return kept, note
+
+
+
 def run(
     url: str,
     cfg: Any,
@@ -46,6 +100,7 @@ def run(
     }
 
     # ① 抓文章
+    source_images: list[str] = []
     if article:
         title = str(article.get("title") or "")
         text = str(article.get("text") or "")
@@ -59,8 +114,26 @@ def run(
             return result
         title = page.title or url
         text = page.text
-        result["steps"]["fetch"] = {"ok": True, "chars": page.chars, "title": page.title}
+        source_images = list(getattr(page, "images", []) or [])
+        result["steps"]["fetch"] = {
+            "ok": True, "chars": page.chars, "title": page.title,
+            "images_found": len(source_images),
+        }
         result["source_text"] = text[:20000]
+
+    # 统一用同一个时间戳，避免文案和图落到不同目录
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder = OUT_DIR / stamp
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # 原文配图：存下来给视觉模型参照（不直接当成品用）
+    ref_note = ""
+    if source_images:
+        grabbed, ref_note = _grab_source_images(source_images, folder, cfg)
+        if grabbed:
+            result["steps"]["fetch"]["images"] = [str(p) for p in grabbed]
+        if ref_note:
+            result["steps"]["fetch"]["image_note"] = ref_note
 
     if len(text) < 200:
         result["steps"]["fetch"]["note"] = "正文太短，改写时容易编"
@@ -75,10 +148,6 @@ def run(
         return result
 
     result["draft"] = draft
-
-    # 统一用同一个时间戳，避免文案和图落到不同目录
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    folder = OUT_DIR / stamp
 
     # ③ 审核
     try:
@@ -96,7 +165,8 @@ def run(
     # ④ 配图
     if draw:
         try:
-            scenes = vs.plan(draft["title"], draft["body"], cfg, n=images, platform=platform)
+            scenes = vs.plan(draft["title"], draft["body"], cfg, n=images,
+                             platform=platform, ref_note=ref_note)
             vs.render(scenes, cfg, folder, prefix="img")
 
             # 核对：图里到底有没有那个主体；对不上的重写提示词，重出到同一个文件名
