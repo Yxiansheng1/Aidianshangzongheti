@@ -662,6 +662,49 @@ def do_content_pub(params: dict[str, Any]) -> dict[str, Any]:
     return {"executed": False, **pub.build(platform, cfg=cfg, **payload)}
 
 
+def _sau_python(cfg: Any) -> str:
+    """sau 装在哪个 venv，就用那个 venv 的 python（patchright 在里面）。"""
+    from ..publish.sau import resolve_sau
+
+    exe = Path(resolve_sau(cfg.sau_cmd, cfg.sau_cwd))
+    candidate = exe.with_name("python.exe")
+    return str(candidate if candidate.is_file() else Path(sys.executable))
+
+
+def do_content_headline(params: dict[str, Any]) -> dict[str, Any]:
+    """头条号：工具填稿，人点发布。开一个新控制台跑，看得见它干了什么。"""
+    from ..content import headline
+
+    cfg = load_config()
+    action = str(params.get("action") or "fill")
+
+    if action == "login":
+        args = [_sau_python(cfg), "-m", "pipeline.content.headline", "login"]
+        message = "已打开浏览器，扫码登录头条号；登录后窗口自动关闭，下次填稿不用再扫。"
+    else:
+        title = str(params.get("title") or "").strip()
+        body = str(params.get("body") or "").strip()
+        if not title or not body:
+            raise ValueError("没有标题或正文，先生成一篇")
+
+        headline.STATE_DIR.mkdir(parents=True, exist_ok=True)
+        draft_path = headline.STATE_DIR / "toutiao-draft.json"
+        draft_path.write_text(json.dumps({
+            "title": title,
+            "body": body,
+            "images": list(params.get("images") or []),
+            "url": str(params.get("url") or ""),
+        }, ensure_ascii=False, indent=1), encoding="utf-8")
+
+        args = [_sau_python(cfg), "-m", "pipeline.content.headline",
+                "fill", "--draft", str(draft_path)]
+        message = ("已开浏览器填稿。填完它会停下等你——检查、选封面、点发布，最后按回车关窗口。")
+
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    subprocess.Popen(args, cwd=str(ROOT), creationflags=flags)
+    return {"started": True, "action": action, "message": message}
+
+
 def do_content_meta() -> dict[str, Any]:
     from ..content.rewrite import list_skills
     from ..content import publish as pub
@@ -1242,6 +1285,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if route == "/api/content/pub":
                 self._json(do_content_pub(payload))
+                return
+
+            if route == "/api/content/headline":
+                self._json(do_content_headline(payload))
                 return
 
             self._json({"error": "not found"}, 404)

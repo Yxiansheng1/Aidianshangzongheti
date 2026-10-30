@@ -612,6 +612,9 @@
     notePubs.forEach(function(p){
       h += '<button class="btn" data-w="pub" data-platform="' + esc(p) + '">发布到' + esc(p) + '</button>';
     });
+    if(plat === "头条"){
+      h += '<button class="btn" data-w="headline">填进头条编辑器（你来点发布）</button>';
+    }
     h += '<button class="btn" data-w="cmd" data-platform="' + esc(plat) + '">看发布命令</button>';
     h += '</div>';
 
@@ -666,6 +669,29 @@
             d.videoUrl = res.url;
             d.videoInfo = res.info;
             renderWriter(d);
+          }).catch(function(e){
+            btn.disabled = false;
+            extra.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+          });
+          return;
+        }
+
+        if(kind === "headline"){
+          btn.disabled = true;
+          extra.innerHTML = '<div class="status-line"><span class="spinner"></span><span>正在打开浏览器…</span></div>';
+          fetch("/api/content/headline", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({
+              action: "fill",
+              title: (d.draft || {}).title || "",
+              body: (d.draft || {}).body || "",
+              images: (d.images || []).map(function(x){ return x.path; }),
+              url: $("w-url").value.trim()
+            })
+          }).then(function(r){ return r.json(); }).then(function(res){
+            btn.disabled = false;
+            if(res.error) throw new Error(res.error);
+            extra.innerHTML = '<div class="advice">' + esc(res.message) + '</div>';
           }).catch(function(e){
             btn.disabled = false;
             extra.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
