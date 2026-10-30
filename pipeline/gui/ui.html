@@ -694,16 +694,18 @@
 
     function accSelect(p){
       var accs = accountsFor(p);
+      function accText(a){
+        return esc(a.label) + (a.nick ? " · " + esc(a.nick) : "") +
+          (a.logged ? "" : "（未登录）");
+      }
       if(accs.length > 1){
-        return '<select data-acc-for="' + esc(p) + '" style="width:155px">' +
+        return '<select data-acc-for="' + esc(p) + '" style="width:210px">' +
           accs.map(function(a){
-            return '<option value="' + esc(a.name) + '">' + esc(a.label) +
-              (a.logged ? "" : "（未登录）") + '</option>';
+            return '<option value="' + esc(a.name) + '">' + accText(a) + '</option>';
           }).join("") + '</select>';
       }
       if(accs.length === 1){
-        return '<span class="muted" style="font-size:12px">' + esc(accs[0].label) +
-          (accs[0].logged ? "" : "（未登录）") + '</span>';
+        return '<span class="muted" style="font-size:12px">' + accText(accs[0]) + '</span>';
       }
       return '';
     }

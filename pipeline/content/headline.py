@@ -215,6 +215,10 @@ def _remember_identity(account: str, ident: dict[str, str]) -> None:
     )
 
 
+class DuplicateAccount(RuntimeError):
+    """两个账号名指向了同一个头条号。"""
+
+
 def _commit_login(page, context) -> bool:
     """确认真登录 → 记下身份 → 存登录态。
 
@@ -235,14 +239,15 @@ def _commit_login(page, context) -> bool:
             not uid and ident.get("name") and info.get("name") == ident.get("name")
         )
         if same:
-            _say("")
-            _say("!" * 60)
-            _say(f" ❌ 这个号和已经登录的「{other}」是同一个头条号。")
-            _say(f"    账号：{ident.get('name') or '（读不到昵称）'}　ID：{uid or '未知'}")
-            _say("    没有保存——两个账号指向同一个号，会把同一篇稿发两遍。")
-            _say(f"    请换另一个手机号登录：把 {state_file(ACCOUNT).name} 相关状态清掉后重来。")
-            _say("!" * 60)
-            raise SystemExit(1)
+            raise DuplicateAccount(
+                "\n"
+                + "!" * 60
+                + f"\n ❌ 这个号和已经登录的「{other}」是同一个头条号。"
+                + f"\n    账号：{ident.get('name') or '（读不到昵称）'}　ID：{uid or '未知'}"
+                + "\n    没有保存——两个账号指向同一个号，会把同一篇稿发两遍。"
+                + "\n    窗口先别关：点「切换账号」或「手机号登录」，换成另一个头条号。"
+                + "\n" + "!" * 60
+            )
 
     _save_state(context)
     if ident:
@@ -262,12 +267,17 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
     except Exception:  # noqa: BLE001
         pass
     # 编辑器页对匿名用户也会渲染，先看首页确认是真登录，再决定要不要等
+    warned = ""
     if _logged_in(page):
-        if _commit_login(page, context):
-            # 核对身份时跑到了首页，填稿前得回到编辑器
-            page.goto(page_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
-            return
+        try:
+            if _commit_login(page, context):
+                # 核对身份时跑到了首页，填稿前得回到编辑器
+                page.goto(page_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(1500)
+                return
+        except DuplicateAccount as exc:
+            _say(str(exc))
+            warned = str(exc)
 
     _say("")
     _say("=" * 60)
@@ -282,11 +292,17 @@ def _wait_login(page, context, page_url: str, *, minutes: int = 5) -> None:
         if "auth" in url or "login" in url:
             continue  # 还在登录页，继续等扫码
         # 已经离开登录页 → 用后台首页确认一次，确认过才存
-        if _commit_login(page, context):
-            _say("[状态] 登录成功，继续。")
-            page.goto(page_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
-            return
+        try:
+            if _commit_login(page, context):
+                _say("[状态] 登录成功，继续。")
+                page.goto(page_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(1500)
+                return
+        except DuplicateAccount as exc:
+            if str(exc) != warned:
+                _say(str(exc))
+                warned = str(exc)
+            continue
         _say("[提示] 还是匿名状态（没真正登进去），请继续扫码…")
         page.goto(page_url, wait_until="domcontentloaded")
 
@@ -308,12 +324,13 @@ def login(account: str = "main") -> None:
     with sync_playwright() as p:
         browser, context, page = _open(p, state_file=None)
         page.goto(HOME_URL, wait_until="domcontentloaded")
+        deadline = time.time() + 15 * 60
         _say("=" * 60)
-        _say(f" 浏览器已打开（账号 {ACCOUNT}）。请扫码登录这个头条号，")
-        _say(" 登录后窗口会自动关掉。想登另一个号，用 --account 换个名字再跑一次。")
+        _say(f" 浏览器已打开（账号 {ACCOUNT}）。请登录你要用的那个头条号。")
+        _say(" 二维码登的是「头条 App 里当前那个账号」，跟手机卡没关系。")
+        _say(" 要登另一个号，点「手机号登录」直接输那个手机号 + 验证码最稳。")
+        _say(" 最多等 15 分钟，登录成功后窗口自动关。")
         _say("=" * 60)
-
-        deadline = time.time() + 300
         while time.time() < deadline:
             page.wait_for_timeout(3000)
             if "auth" in page.url or "login" in page.url:

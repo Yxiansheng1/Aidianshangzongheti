@@ -15,13 +15,14 @@ sys.stdout.reconfigure(encoding="utf-8")
 from patchright.sync_api import sync_playwright
 
 import pipeline.content.headline as h
+from pipeline.content.accounts import is_account_state
 
 STATE_DIR = Path(r"D:\AIdianshangzongheti\output\_state")
 
 
 def main() -> None:
     states = sorted(STATE_DIR.glob("toutiao-*.json"))
-    states = [p for p in states if "draft" not in p.name and "stats" not in p.name]
+    states = [p for p in states if is_account_state(p)]
     if not states:
         raise SystemExit("没有任何头条登录态")
 

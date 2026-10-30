@@ -21,9 +21,9 @@ STATE_DIR = ROOT / "output" / "_state"
 
 # 账号名 → 给人看的名字。账号名是 sau 的 --account 参数，别改。
 ACCOUNT_LABELS = {
-    "main": "主号",
-    "second": "二号",
-    "third": "三号",
+    "main": "号1",
+    "second": "号2",
+    "third": "号3",
 }
 
 # 平台 → (显示名, sau 平台标识)
@@ -81,19 +81,42 @@ def accounts_of(display_name: str) -> list[dict[str, Any]]:
     return out
 
 
+NON_ACCOUNT_STATE = ("draft", "stats", "identity", "log", ".bak")
+
+
+def is_account_state(path: Path) -> bool:
+    """output/_state 里哪些 todo 文件是「某个账号的登录态」。
+
+    草稿、数据、身份表、日志、备份都在同一个目录里，别把它们当成账号列出来。
+    """
+    return not any(word in path.name for word in NON_ACCOUNT_STATE)
+
+
+def _toutiao_identity() -> dict[str, str]:
+    """账号名 → 头条上的昵称（只作展示，帮人认出这是哪个号）。"""
+    try:
+        raw = json.loads((STATE_DIR / "toutiao-identity.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return {
+        str(k): str(v.get("name") or "") for k, v in raw.items() if isinstance(v, dict)
+    }
+
+
 def headline_accounts() -> list[dict[str, Any]]:
     """头条账号（我们自己存登录态）。"""
     found: dict[str, bool] = {}
     if STATE_DIR.is_dir():
         for path in STATE_DIR.glob("toutiao-*.json"):
             name = path.stem[len("toutiao-"):]
-            if name and "draft" not in name and "stats" not in name:
+            if name and is_account_state(path):
                 found[name] = path.stat().st_size > 200
     if not found:
         found["main"] = False
+    nicks = _toutiao_identity()
     return [
         {"name": name, "label": f"{ACCOUNT_LABELS.get(name, name)}（{name}）",
-         "logged": bool(found[name])}
+         "nick": nicks.get(name, ""), "logged": bool(found[name])}
         for name in sorted(found)
     ]
 
