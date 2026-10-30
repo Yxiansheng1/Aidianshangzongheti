@@ -198,6 +198,16 @@ def _fill_title(page, title: str) -> bool:
     box.click()
     box.fill("")
     box.type(title, delay=15)
+
+    # 回读：填进去和「以为填进去了」是两件事
+    try:
+        got = box.input_value(timeout=3000)
+    except Exception:  # noqa: BLE001
+        got = ""
+    if not got.strip():
+        _say("[警告] 标题框回读是空的，可能页面有遮罩或没登录。")
+        return False
+    _say(f"[核对] 标题回读：{got.strip()[:30]}")
     return True
 
 
@@ -216,6 +226,17 @@ def _fill_body(page, body: str) -> bool:
             page.keyboard.insert_text(line)
         if index != len(paragraphs) - 1:
             page.keyboard.press("Enter")
+
+    # 回读：编辑器里到底有没有字
+    try:
+        got = editor.evaluate("el => el.innerText || el.textContent || ''")
+    except Exception:  # noqa: BLE001
+        got = ""
+    got = (got or "").strip()
+    if len(got) < 20:
+        _say("[警告] 正文编辑器回读几乎是空的，可能编辑器还没就绪或被遮罩挡住。")
+        return False
+    _say(f"[核对] 正文回读：{len(got)} 字")
     return True
 
 
@@ -252,13 +273,24 @@ def fill(draft_path: str) -> None:
         browser, context, page = _open(p, state_file=STATE_FILE)
         _wait_login(page, context, EDITOR_URL)
 
+        # 有的页面不跳登录页，而是在发布页上挂一个登录弹层
+        try:
+            wall = (page.get_by_text("扫码登录", exact=False).count() > 0
+                    or page.get_by_text("登录后即可", exact=False).count() > 0)
+        except Exception:  # noqa: BLE001
+            wall = False
+        if wall:
+            _say("[警告] 页面上有「扫码登录 / 登录后」字样，可能登录已过期。先登录再说。")
+
         _say(f"[填稿] 标题：{title}")
-        if not _fill_title(page, title):
-            _say("[警告] 没找到标题输入框，标题需要你自己粘。")
+        title_ok = _fill_title(page, title)
+        if not title_ok:
+            _say("[警告] 标题没填上，需要你自己粘。")
 
         _say(f"[填稿] 正文：{len(body)} 字")
-        if not _fill_body(page, body):
-            _say("[警告] 没找到正文编辑器，正文需要你自己粘。")
+        body_ok = _fill_body(page, body)
+        if not body_ok:
+            _say("[警告] 正文没填上，需要你自己粘。")
 
         if images:
             done, reason = _upload_images(page, images)
@@ -272,8 +304,11 @@ def fill(draft_path: str) -> None:
 
         _say("")
         _say("=" * 60)
-        _say(" 稿子已经填进编辑器了，**剩下的事交给你**：")
-        _say("   1. 通读一遍，改你不满意的句子")
+        if title_ok and body_ok:
+            _say(" 标题和正文已填好（上面有回读核对），**剩下的事交给你**：")
+        else:
+            _say(" 有一部分没自动填上（上面标了警告），**剩下的事交给你**：")
+        _say("   1. 通读一遍，补上没填的部分，改你不满意的句子")
         _say("   2. 选封面、选分类、加标签")
         _say("   3. 自己点「发布」")
         _say(" 这个窗口先别关——关掉浏览器会一起关。发完再按回车。")
