@@ -393,6 +393,75 @@ def _fill_body(page, body: str) -> bool:
     return True
 
 
+def insert_topics(page, topics: list[str]) -> tuple[list[str], list[str]]:
+    """把标签插成真话题（#话题# 那种带 ID 的节点），返回 (加上的, 跳过的)。
+
+    头条的话题必须在编辑器里打 # + 关键词，从候选框里点选，纯文本 #xxx 不算。
+    候选框是绝对定位浮层，不能用 offsetParent 判断可见性。
+    """
+    added: list[str] = []
+    skipped: list[str] = []
+
+    for topic in topics:
+        topic = topic.strip().lstrip("#").rstrip("#")
+        if not topic:
+            continue
+        page.keyboard.type("#" + topic, delay=110)
+        for _ in range(8):
+            page.wait_for_timeout(700)
+            if page.evaluate(
+                """() => { const m = document.querySelector('.mention-selector-modal');
+                           return !!m && m.getBoundingClientRect().height > 20; }"""
+            ):
+                break
+
+        items = page.locator(".mention-selector-modal .forum-list-item")
+        try:
+            count = items.count()
+        except Exception:  # noqa: BLE001
+            count = 0
+
+        names: list[str] = []
+        for i in range(count):
+            node = items.nth(i).locator(".forum-list-item-text")
+            try:
+                names.append((node.first.inner_text() or "").strip())
+            except Exception:  # noqa: BLE001
+                names.append("")
+
+        idx = next((i for i, n in enumerate(names) if n == topic), None)
+        if idx is None:
+            idx = next(
+                (i for i, n in enumerate(names) if n and topic in n and len(n) <= len(topic) + 4),
+                None,
+            )
+
+        if idx is None:
+            # 取消并删掉刚打的字，别把半截 #关键词 留在正文里
+            page.keyboard.press("Space")
+            page.wait_for_timeout(400)
+            for _ in range(len(topic) + 1):
+                page.keyboard.press("Backspace")
+            page.wait_for_timeout(300)
+            skipped.append(topic)
+            _say(f"[话题] 没找到「{topic}」对应话题，跳过")
+            continue
+
+        try:
+            items.nth(idx).click()
+        except Exception:  # noqa: BLE001
+            skipped.append(topic)
+            _say(f"[话题] 「{topic}」点不上，跳过")
+            continue
+        page.wait_for_timeout(1200)
+        added.append(names[idx])
+        _say(f"[话题] #{names[idx]}#")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(400)
+
+    return added, skipped
+
+
 def _upload_images(page, images: list[str]) -> tuple[int, str]:
     """尽量把图塞进去。塞不进去不报错，只提示人工补。"""
     files = [str(Path(i)) for i in images if Path(i).is_file()]

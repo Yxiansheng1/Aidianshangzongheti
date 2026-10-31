@@ -126,7 +126,20 @@ def main() -> None:
                 page.wait_for_timeout(400)
             done = insert_images(page, images)
             log(f"[填稿] 图片：{done} 张已插入")
-        page.wait_for_timeout(2500)
+        tags = [str(t) for t in (data.get("tags") or []) if str(t).strip()]
+        if tags:
+            editor = h._first_visible(page, h.BODY_SELECTORS, timeout=5000)
+            if editor:
+                editor.click()
+                page.keyboard.press("Control+End")
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(400)
+                added, skipped = h.insert_topics(page, tags[:5])
+                log(f"[话题] 加上 {len(added)} 个：{added}" + (f"，没找到：{skipped}" if skipped else ""))
+            else:
+                log("[话题] 找不到正文编辑器，话题没加")
+
+        page.wait_for_timeout(2000)
         page.screenshot(path=str(out_dir / "pub-1-filled.png"))
 
         clicked = click_by_text(page, ("预览并发布", "发布"))
