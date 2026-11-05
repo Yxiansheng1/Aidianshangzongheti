@@ -1,0 +1,16 @@
+{
+  "name": "aidianshang-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "本地客户端壳：拉起 pipeline.api 后端，显示后端状态",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "verify:process": "node scripts/verify-process.mjs",
+    "verify:ui": "node scripts/verify-ui.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1"
+  }
+}

@@ -36,9 +36,33 @@ def test_health_ok():
     r = client.get("/api/health")
     assert r.status_code == 200
     body = r.json()
+    assert body["ok"] is True
     assert body["status"] == "ok"
     assert body["service"] == "aidianshang-api"
+    assert body["version"] == "0.1.0"
     assert body["pid"] > 0
+    # L2 已经落地，health 顺带报工具数（读不到时是 0，不许 500）
+    assert isinstance(body["tools"], int)
+
+
+def test_health_reports_tool_count_from_l2(monkeypatch):
+    fake = types.ModuleType("pipeline.tools")
+    fake.build_registry = make_registry
+    monkeypatch.setitem(sys.modules, "pipeline.tools", fake)
+    assert TestClient(create_app()).get("/api/health").json()["tools"] == 2
+
+
+def test_health_survives_broken_registry(monkeypatch):
+    fake = types.ModuleType("pipeline.tools")
+
+    def broken() -> None:
+        raise RuntimeError("工具层炸了")
+
+    fake.build_registry = broken
+    monkeypatch.setitem(sys.modules, "pipeline.tools", fake)
+    r = TestClient(create_app()).get("/api/health")
+    assert r.status_code == 200
+    assert r.json()["tools"] == 0
 
 
 def test_defaults_are_local_only():
@@ -113,3 +137,34 @@ def test_module_entrypoint_parses_port(monkeypatch):
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 8765
     assert callable(getattr(captured["app"], "openapi", None))
+
+
+def test_watchdog_starts_only_when_env_set(monkeypatch):
+    started = []
+    monkeypatch.setattr("pipeline.api.__main__.uvicorn.run", lambda app, **kw: None)
+    monkeypatch.setattr(
+        "pipeline.api.__main__.start_parent_watchdog", lambda: started.append(True)
+    )
+
+    from pipeline.api.__main__ import WATCHDOG_ENV, main
+
+    monkeypatch.delenv(WATCHDOG_ENV, raising=False)
+    main([])
+    assert started == []
+
+    monkeypatch.setenv(WATCHDOG_ENV, "1")
+    main([])
+    assert started == [True]
+
+
+def test_parent_alive_detects_self_and_missing_pid():
+    import os
+
+    from pipeline.api.__main__ import _parent_alive
+
+    if not sys.platform.startswith("win"):
+        pytest.skip("看门狗用 Win32 API 判断父进程存亡")
+
+    assert _parent_alive(os.getpid()) is True
+    # 一个几乎不可能存在的 PID：查到就是查不到
+    assert _parent_alive(999_999) is False

@@ -1,6 +1,6 @@
 """L3：本地 FastAPI 薄壳。
 
-    GET /api/health  进程活着没有。故意不碰工具层——L2 坏了它也得答得上话。
+    GET /api/health  进程活着没有；顺带报个工具数（读失败也不影响 200）。
     GET /api/tools   L2 的工具清单（名称 / 说明 / 风险等级 / 是否关键）。
 
 工具层没就绪时 /api/tools 仍然回 200，但 ok=false 且带 error。
@@ -28,10 +28,17 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
+        # 工具数只做展示，读注册表失败不许影响 health 的 200。
+        try:
+            tools = len(load_tool_catalog().tools)
+        except Exception:
+            tools = 0
         return {
+            "ok": True,
             "status": "ok",
             "service": SERVICE_NAME,
             "version": API_VERSION,
+            "tools": tools,
             "pid": os.getpid(),
             "uptime_s": round(time.monotonic() - _STARTED_AT, 3),
         }
