@@ -237,6 +237,9 @@ def test_fill_editor_calls_headline_cli(reg, monkeypatch):
     assert argv[1:4] == ["-m", "pipeline.content.headline", "fill"]
     assert argv[argv.index("--draft") + 1] == result["draft_path"]
     assert argv[argv.index("--account") + 1] == "main"
+    # 必须带 --hold：非交互环境没有终端，否则填完立刻关浏览器、稿子全丢
+    assert "--hold" in argv
+    assert int(argv[argv.index("--hold") + 1]) > 0
     assert result["ok"] is True
 
     draft_file = Path(result["draft_path"])
@@ -329,7 +332,27 @@ def test_publish_marks_missing_confirm_button_as_failed(monkeypatch, tmp_path):
 
 
 def test_tools_do_not_import_patchright_or_headline():
-    """填稿/发布靠 subprocess，工具层自己不许把浏览器依赖拉进来。"""
+    """填稿/发布靠 subprocess，工具层自己不许把浏览器依赖拉进来。
+
+    注意：不能在当前进程里断言 sys.modules——别的测试 import 过 headline 就会误报。
+    改成在干净子进程里 import pipeline.tools，再看它有没有连带拉进浏览器依赖。
+    """
     assert editor.CLI_MODULE == "pipeline.content.headline"
-    assert "patchright" not in sys.modules
-    assert "pipeline.content.headline" not in sys.modules
+
+    code = (
+        "import sys, pipeline.tools\n"
+        "bad = [m for m in ('patchright', 'pipeline.content.headline') if m in sys.modules]\n"
+        "assert not bad, f'工具层连带拉进了：{bad}'\n"
+        "print('ok')\n"
+    )
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+    )
+    assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")

@@ -480,7 +480,36 @@ def _upload_images(page, images: list[str]) -> tuple[int, str]:
     return 0, "页面上没找到上传入口"
 
 
-def fill(draft_path: str, account: str = "main") -> None:
+def _wait_mode(hold: int, stdin) -> tuple[str, int]:
+    """填完之后怎么等：返回 ("sleep", 秒) 或 ("input", 0)。
+
+    为什么要这个：以前无条件 input()，从 API/子进程调用时 stdin 是 EOF，
+    input() 立刻抛异常 → 浏览器被关 → 填好的稿子没了。
+    """
+    if hold and hold > 0:
+        return "sleep", hold
+    if stdin is not None and getattr(stdin, "isatty", lambda: False)():
+        return "input", 0
+    # 非交互环境：默认留 10 分钟，够人过去改稿、点发布
+    return "sleep", 600
+
+
+def _wait_after_fill(hold: int) -> None:
+    mode, seconds = _wait_mode(hold, sys.stdin)
+    if mode == "input":
+        try:
+            input()
+        except (EOFError, KeyboardInterrupt):
+            pass
+        return
+    _say(f" 非交互环境：窗口保留 {seconds} 秒，发完可以直接关浏览器。")
+    try:
+        time.sleep(seconds)
+    except KeyboardInterrupt:
+        pass
+
+
+def fill(draft_path: str, account: str = "main", hold: int = 0) -> None:
     global ACCOUNT
     ACCOUNT = account
     _migrate_legacy()
@@ -541,10 +570,9 @@ def fill(draft_path: str, account: str = "main") -> None:
         _say("=" * 60)
 
         try:
-            input()
-        except (EOFError, KeyboardInterrupt):
-            pass
-        browser.close()
+            _wait_after_fill(hold)
+        finally:
+            browser.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -557,12 +585,18 @@ def main(argv: list[str] | None = None) -> int:
     p_fill = sub.add_parser("fill", help="把草稿填进头条编辑器")
     p_fill.add_argument("--draft", required=True, help="草稿 JSON 路径")
     p_fill.add_argument("--account", default="main", help="账号标识，例如 main / second")
+    p_fill.add_argument(
+        "--hold",
+        type=int,
+        default=0,
+        help="填完后窗口保留多少秒（0=交互终端等回车，非交互环境默认保留 600 秒）",
+    )
 
     args = parser.parse_args(argv)
     if args.cmd == "login":
         login(args.account)
     else:
-        fill(args.draft, args.account)
+        fill(args.draft, args.account, hold=args.hold)
     return 0
 
 
