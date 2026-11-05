@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装核心依赖（不含 harness，保证 CI 快）
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8" "pydantic>=2"
+
+      - name: 跑测试
+        run: python -m pytest tests -q
