@@ -27,12 +27,14 @@ DEFAULT_SKILL_DIRS = (
 
 @dataclass
 class AgentConfig:
-    model: str = ""
-    """形如 openai:gpt-4o-mini / anthropic:claude-sonnet-4 / ollama:qwen3。空则报错。"""
+    model: Any = ""
+    """模型名字符串（openai:xxx / ollama:xxx），或直接给一个 LangChain ChatModel 实例。"""
     system_prompt: str = ""
     skill_dirs: tuple[Path, ...] = field(default_factory=lambda: DEFAULT_SKILL_DIRS)
     memory_files: tuple[Path, ...] = ()
     name: str = "workbench"
+    checkpointer: Any = None
+    """None → 内存级 InMemorySaver（进程退出即丢）。要跨重启请传 SqliteSaver 等。"""
 
 
 def _interrupt_on(registry: ToolRegistry, controller: AutonomyController) -> dict[str, Any]:
@@ -71,7 +73,7 @@ def build_agent(registry: ToolRegistry, controller: AutonomyController, config: 
     需要模型。没配模型时抛 RuntimeError，并说清楚怎么配。
     """
     cfg = config or AgentConfig()
-    if not cfg.model:
+    if not cfg.model or (isinstance(cfg.model, str) and not cfg.model.strip()):
         raise RuntimeError(
             "没有配置模型。可以：\n"
             "  1) 设置环境变量（如 OPENAI_API_KEY）并用 model='openai:gpt-4o-mini'\n"
@@ -92,6 +94,14 @@ def build_agent(registry: ToolRegistry, controller: AutonomyController, config: 
     tools: list[BaseTool] = to_langchain_tools(registry)
     prompt = cfg.system_prompt or _default_prompt(registry, controller)
 
+    # langgraph 1.2 起，根图不接受 checkpointer=True，必须给真实的 saver
+    if cfg.checkpointer is None:
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        saver: Any = InMemorySaver()
+    else:
+        saver = cfg.checkpointer
+
     return create_deep_agent(
         model=cfg.model,
         tools=tools,
@@ -99,7 +109,7 @@ def build_agent(registry: ToolRegistry, controller: AutonomyController, config: 
         skills=_skill_paths(cfg.skill_dirs) or None,
         memory=[str(p) for p in cfg.memory_files if p.is_file()] or None,
         interrupt_on=_interrupt_on(registry, controller),
-        checkpointer=True,   # 内存级；要跨重启就在调用处换成 SqliteSaver
+        checkpointer=saver,
         name=cfg.name,
     )
 

@@ -7,6 +7,13 @@
 """
 
 from .agent import AgentConfig, build_agent
+from .approval import (
+    PendingApproval,
+    approve_all,
+    build_decisions,
+    parse_interrupt,
+    reject_all,
+)
 from .policy import Autonomy, AutonomyController, Risk
 from .registry import ApprovalRequired, ToolRegistry, ToolSpec
 
@@ -15,8 +22,13 @@ __all__ = [
     "ApprovalRequired",
     "Autonomy",
     "AutonomyController",
+    "PendingApproval",
     "Risk",
     "ToolRegistry",
     "ToolSpec",
+    "approve_all",
     "build_agent",
+    "build_decisions",
+    "parse_interrupt",
+    "reject_all",
 ]
