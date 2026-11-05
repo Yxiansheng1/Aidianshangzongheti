@@ -28,3 +28,10 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---- Electron 客户端 ----
+app/node_modules/
+app/dist/
+app/out/
+app/release/
+app/.vite/
